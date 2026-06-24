@@ -1,0 +1,6 @@
+{
+  "name": "מערכת דיווח ובקרת שכר ותקציב - סמינר שצ'רנסקי",
+  "description": "מערכת דיווח ובקרת תקציב ושכר עבור סמינר שצ'רנסקי בית שמש - שנת לימודים תשפ\"ז. תומכת בהגדרות הרשאות מנהלת, מזכירה ורכזות וסנכרון מלא ל-Supabase / PostgreSQL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
