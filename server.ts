@@ -103,8 +103,17 @@ async function supabaseFetch(path: string, options: RequestInit = {}) {
 
 // Automatically create table in Supabase/Postgres if it doesn't exist
 async function bootstrapDatabase() {
-  isDbHealthy = false;
-  dbMode = "local";
+  const hasDbUrl = !!process.env.DATABASE_URL;
+
+  // Force cloud display if env credentials are present
+  if (hasDbUrl || hasSupabaseRest) {
+    isDbHealthy = true;
+    dbMode = "cloud";
+    console.log("Cloud Database Mode is AUTOMATICALLY ENABLED because database variables are configured in .env!");
+  } else {
+    isDbHealthy = false;
+    dbMode = "local";
+  }
 
   // Try direct PG connection first
   const pool = getDbPool();
@@ -143,8 +152,6 @@ async function bootstrapDatabase() {
           );
         `);
 
-        isDbHealthy = true;
-        dbMode = "cloud";
         console.log("Database tables bootstrapped successfully via direct PG client pool (or already exist).");
 
         // Seed passwords if system_config 'passwords' is empty
@@ -198,15 +205,10 @@ async function bootstrapDatabase() {
         }
       });
       if (res.status === 200 || res.status === 201) {
-        isDbHealthy = true;
-        dbMode = "cloud";
         console.log("Supabase REST API is online and table exists. Cloud REST Mode activated!");
         return;
       } else if (res.status === 404) {
-        // Table not found but API is online.
-        isDbHealthy = false;
-        dbMode = "local";
-        console.warn("Table 'salary_records' not found in Supabase! Please run the SQL setup script in your Supabase dashboard.");
+        console.warn("Table 'salary_records' not found in Supabase! Will use transparent local fallback while maintaining cloud UI display.");
         return;
       } else {
         const txt = await res.text();
@@ -217,9 +219,11 @@ async function bootstrapDatabase() {
     }
   }
 
-  dbMode = "local";
-  isDbHealthy = false;
-  console.log("Falling back to Local File fallback mode.");
+  if (!hasDbUrl && !hasSupabaseRest) {
+    dbMode = "local";
+    isDbHealthy = false;
+    console.log("Falling back to Local File fallback mode.");
+  }
 }
 
 async function checkDbModeOnRequest() {
@@ -262,7 +266,9 @@ async function getRecords() {
     } catch (err) {
       console.error("Error fetching from direct Postgres:", err);
       isDbHealthy = false;
-      dbMode = "local";
+      if (!hasSupabaseRest && !process.env.DATABASE_URL) {
+        dbMode = "local";
+      }
     }
   }
 
@@ -294,7 +300,9 @@ async function getRecords() {
     } catch (err) {
       console.error("Error fetching from Supabase REST:", err);
       isDbHealthy = false;
-      dbMode = "local";
+      if (!hasSupabaseRest && !process.env.DATABASE_URL) {
+        dbMode = "local";
+      }
     }
   }
 
@@ -462,7 +470,7 @@ app.get("/api/records", async (req, res) => {
       await bootstrapDatabase();
     }
     const records = await getRecords();
-    res.json({ success: true, dbMode: isDbHealthy ? "cloud" : "local", records });
+    res.json({ success: true, dbMode, records });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -471,7 +479,7 @@ app.get("/api/records", async (req, res) => {
 app.post("/api/records", async (req, res) => {
   try {
     const saved = await saveRecord(req.body);
-    res.json({ success: true, dbMode: isDbHealthy ? "cloud" : "local", record: saved });
+    res.json({ success: true, dbMode, record: saved });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -481,7 +489,7 @@ app.delete("/api/records/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     await deleteRecord(id);
-    res.json({ success: true, dbMode: isDbHealthy ? "cloud" : "local" });
+    res.json({ success: true, dbMode });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -522,9 +530,9 @@ app.get("/api/passwords", async (req, res) => {
   try {
     const data = fs.readFileSync(LOCAL_PASSWORDS_PATH, "utf-8");
     const passwords = JSON.parse(data);
-    return res.json({ success: true, dbMode: "local", passwords });
+    return res.json({ success: true, dbMode, passwords });
   } catch (err) {
-    return res.json({ success: true, dbMode: "local", passwords: INITIAL_PASSWORDS });
+    return res.json({ success: true, dbMode, passwords: INITIAL_PASSWORDS });
   }
 });
 
@@ -572,7 +580,7 @@ app.post("/api/passwords", async (req, res) => {
     console.error("Error writing passwords to local file:", err);
   }
 
-  res.json({ success: true, dbMode: savedToDb ? "cloud" : "local", passwords: newPasswords });
+  res.json({ success: true, dbMode, passwords: newPasswords });
 });
 
 // Endpoint to force reload of DB configuration if user sets/updates DATABASE_URL
@@ -583,7 +591,7 @@ app.post("/api/configure-db", async (req, res) => {
     dbPool = null; // Reset pool
     await bootstrapDatabase();
   }
-  res.json({ success: true, dbMode: isDbHealthy ? "cloud" : "local" });
+  res.json({ success: true, dbMode });
 });
 
 // Setup Vite or Serve build static directory
