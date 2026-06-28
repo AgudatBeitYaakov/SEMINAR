@@ -222,11 +222,18 @@ async function bootstrapDatabase() {
   console.log("Falling back to Local File fallback mode.");
 }
 
+async function checkDbModeOnRequest() {
+  if (dbMode === "local" && (hasSupabaseRest || !!process.env.DATABASE_URL)) {
+    await bootstrapDatabase();
+  }
+}
+
 // Bootstrap on startup
 bootstrapDatabase();
 
 // API Helper to get all records
 async function getRecords() {
+  await checkDbModeOnRequest();
   // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
   if (pool && isDbHealthy && dbMode === "cloud") {
@@ -302,6 +309,7 @@ async function getRecords() {
 
 // API Helper to save/update a record
 async function saveRecord(item: any) {
+  await checkDbModeOnRequest();
   const dbPayload = {
     track: item.track,
     year: item.year,
@@ -415,6 +423,7 @@ async function saveRecord(item: any) {
 
 // API Helper to delete a record
 async function deleteRecord(id: number) {
+  await checkDbModeOnRequest();
   // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
   if (pool && isDbHealthy && dbMode === "cloud") {
@@ -480,6 +489,7 @@ app.delete("/api/records/:id", async (req, res) => {
 
 // Passwords APIs
 app.get("/api/passwords", async (req, res) => {
+  await checkDbModeOnRequest();
   // Mode 1: Direct Postgres
   const pool = getDbPool();
   if (pool && isDbHealthy && dbMode === "cloud") {
@@ -519,6 +529,7 @@ app.get("/api/passwords", async (req, res) => {
 });
 
 app.post("/api/passwords", async (req, res) => {
+  await checkDbModeOnRequest();
   const newPasswords = req.body;
   const jsonStr = JSON.stringify(newPasswords);
   let savedToDb = false;
