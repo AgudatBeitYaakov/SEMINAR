@@ -108,7 +108,7 @@ export default function App() {
 
   // Load configuration from LocalStorage and backend API on mount
   useEffect(() => {
-    // Passwords
+    // Passwords fast local fallback
     const savedPasswords = localStorage.getItem("sz_passwords_store_v2");
     if (savedPasswords) {
       try {
@@ -122,8 +122,22 @@ export default function App() {
       setCustomDbUrl(savedUrl);
     }
 
+    fetchPasswords();
     fetchRecords();
   }, []);
+
+  const fetchPasswords = async () => {
+    try {
+      const response = await fetch("/api/passwords");
+      const data = await response.json();
+      if (data.success && data.passwords) {
+        setPasswords(data.passwords);
+        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
+      }
+    } catch (err) {
+      console.error("API error fetching passwords", err);
+    }
+  };
 
   // Fetch from Express Server
   const fetchRecords = async () => {
@@ -460,10 +474,30 @@ export default function App() {
     }
   };
 
-  const handleSaveCoordinatorPasswords = () => {
-    localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
-    triggerAlert("סיסמאות הרכזות עודכנו ונשמרו בהצלחה במערכת!", "success");
-    setShowPasswordsHelperModal(false);
+  const handleSaveCoordinatorPasswords = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/passwords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(passwords)
+      });
+      const data = await response.json();
+      if (data.success && data.passwords) {
+        setPasswords(data.passwords);
+        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
+        triggerAlert("הסיסמאות עודכנו ונשמרו בהצלחה במסד הנתונים ובמערכת!", "success");
+      } else {
+        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
+        triggerAlert("הסיסמאות עודכנו מקומית!", "info");
+      }
+    } catch (e) {
+      localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
+      triggerAlert("שגיאה בשמירת סיסמאות לענן, נשמר באופן מקומי.", "info");
+    } finally {
+      setLoading(false);
+      setShowPasswordsHelperModal(false);
+    }
   };
 
   // Clear system data

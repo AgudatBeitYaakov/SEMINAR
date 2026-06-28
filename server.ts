@@ -15,10 +15,30 @@ app.use(express.json());
 // Path for local storage fallback when no DATABASE_URL is provided
 const DATA_DIR = path.join(process.cwd(), "data");
 const LOCAL_DB_PATH = path.join(DATA_DIR, "records.json");
+const LOCAL_PASSWORDS_PATH = path.join(DATA_DIR, "passwords.json");
+
+const INITIAL_PASSWORDS = {
+  director: "111",
+  secretary: "222",
+  coordinators: {
+    "ייעוץ חינוכי": "301",
+    "הוראה מותאמת": "302",
+    "הוראת אנגלית": "303",
+    "הוראת מתמטיקה": "304",
+    "חינוך מיוחד": "305",
+    "הדרכת טיולים": "306",
+    "גרפיקה ומולטימדיה": "307",
+    "חשבונאות ומיסים": "308"
+  } as Record<string, string>
+};
 
 // Ensure data folder exists
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(LOCAL_PASSWORDS_PATH)) {
+  fs.writeFileSync(LOCAL_PASSWORDS_PATH, JSON.stringify(INITIAL_PASSWORDS, null, 2), "utf-8");
 }
 
 // Initial mock dataset representing the seminary's rich records
@@ -43,10 +63,11 @@ if (!fs.existsSync(LOCAL_DB_PATH)) {
 // PostgreSQL connection pool (with lazy initialization and robust validation)
 let dbPool: pg.Pool | null = null;
 let isDbHealthy = false;
+let dbMode: "cloud" | "local" = "local";
 
 function getDbPool(): pg.Pool | null {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
+  if (!connectionString || (!connectionString.startsWith("postgres://") && !connectionString.startsWith("postgresql://"))) {
     return null;
   }
   if (!dbPool) {
@@ -59,65 +80,146 @@ function getDbPool(): pg.Pool | null {
   return dbPool;
 }
 
+// Supabase REST client config
+const hasSupabaseRest = !!process.env.NEXT_PUBLIC_SUPABASE_URL && (!!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+async function supabaseFetch(path: string, options: RequestInit = {}) {
+  const url = `${supabaseUrl}/rest/v1${path}`;
+  const headers = {
+    "apikey": supabaseKey,
+    "Authorization": `Bearer ${supabaseKey}`,
+    "Content-Type": "application/json",
+    ...options.headers
+  } as Record<string, string>;
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Supabase REST error: ${response.status} - ${text}`);
+  }
+  return response;
+}
+
 // Automatically create table in Supabase/Postgres if it doesn't exist
 async function bootstrapDatabase() {
-  const pool = getDbPool();
-  if (!pool) return;
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS salary_records (
-          id SERIAL PRIMARY KEY,
-          track TEXT NOT NULL,
-          year TEXT NOT NULL,
-          teacher_name TEXT NOT NULL,
-          subject TEXT NOT NULL,
-          semester TEXT NOT NULL,
-          payment_method TEXT NOT NULL,
-          shash DECIMAL(10,2) NOT NULL DEFAULT 0,
-          meetings INTEGER NOT NULL DEFAULT 0,
-          total_hours INTEGER NOT NULL DEFAULT 0,
-          rate DECIMAL(10,2) NOT NULL DEFAULT 0,
-          employer_overhead DECIMAL(10,2) NOT NULL DEFAULT 0,
-          total_annual DECIMAL(10,2) NOT NULL DEFAULT 0,
-          tz TEXT,
-          phone TEXT NOT NULL,
-          email TEXT NOT NULL,
-          is_approved BOOLEAN NOT NULL DEFAULT FALSE,
-          is_contract_ready BOOLEAN NOT NULL DEFAULT FALSE,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      isDbHealthy = true;
-      console.log("Database table bootstrapped successfully (or already exists).");
+  isDbHealthy = false;
+  dbMode = "local";
 
-      // Check if table is empty. If so, seed with INITIAL_DATA
-      const res = await client.query("SELECT COUNT(*) FROM salary_records");
-      const count = parseInt(res.rows[0].count, 10);
-      if (count === 0) {
-        console.log("Database is empty. Seeding with initial seminar records...");
-        for (const item of INITIAL_DATA) {
-          await client.query(
-            `INSERT INTO salary_records 
-             (track, year, teacher_name, subject, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-            [
-              item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
-              item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
-              item.tz, item.phone, item.email, item.isApproved, item.isContractReady
-            ]
+  // Try direct PG connection first
+  const pool = getDbPool();
+  if (pool) {
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS salary_records (
+            id SERIAL PRIMARY KEY,
+            track TEXT NOT NULL,
+            year TEXT NOT NULL,
+            teacher_name TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            payment_method TEXT NOT NULL,
+            shash DECIMAL(10,2) NOT NULL DEFAULT 0,
+            meetings INTEGER NOT NULL DEFAULT 0,
+            total_hours INTEGER NOT NULL DEFAULT 0,
+            rate DECIMAL(10,2) NOT NULL DEFAULT 0,
+            employer_overhead DECIMAL(10,2) NOT NULL DEFAULT 0,
+            total_annual DECIMAL(10,2) NOT NULL DEFAULT 0,
+            tz TEXT,
+            phone TEXT NOT NULL,
+            email TEXT NOT NULL,
+            is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+            is_contract_ready BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
           );
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS system_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          );
+        `);
+
+        isDbHealthy = true;
+        dbMode = "cloud";
+        console.log("Database tables bootstrapped successfully via direct PG client pool (or already exist).");
+
+        // Seed passwords if system_config 'passwords' is empty
+        const configRes = await client.query("SELECT COUNT(*) FROM system_config WHERE key = 'passwords'");
+        const configCount = parseInt(configRes.rows[0].count, 10);
+        if (configCount === 0) {
+          await client.query(
+            "INSERT INTO system_config (key, value) VALUES ('passwords', $1)",
+            [JSON.stringify(INITIAL_PASSWORDS)]
+          );
+          console.log("Database system_config table seeded with default passwords.");
         }
-        console.log("Database successfully seeded.");
+
+        // Check if table is empty. If so, seed with INITIAL_DATA
+        const res = await client.query("SELECT COUNT(*) FROM salary_records");
+        const count = parseInt(res.rows[0].count, 10);
+        if (count === 0) {
+          console.log("Database is empty. Seeding with initial seminar records...");
+          for (const item of INITIAL_DATA) {
+            await client.query(
+              `INSERT INTO salary_records 
+               (track, year, teacher_name, subject, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+              [
+                item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
+                item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
+                item.tz, item.phone, item.email, item.isApproved, item.isContractReady
+              ]
+            );
+          }
+          console.log("Database successfully seeded.");
+        }
+        return;
+      } finally {
+        client.release();
       }
-    } finally {
-      client.release();
+    } catch (err: any) {
+      console.error("Direct PG Connection / Bootstrapping failed:", err.message);
     }
-  } catch (err) {
-    console.error("Database bootstrapping failed, falling back to local storage:", err);
-    isDbHealthy = false;
   }
+
+  // Fallback to Supabase REST client connection if variables exist
+  if (hasSupabaseRest) {
+    try {
+      console.log("Testing Supabase connection via REST API...");
+      // Try to read a dummy item or get schema status
+      const res = await fetch(`${supabaseUrl}/rest/v1/salary_records?select=id&limit=1`, {
+        headers: {
+          "apikey": supabaseKey,
+          "Authorization": `Bearer ${supabaseKey}`
+        }
+      });
+      if (res.status === 200 || res.status === 201) {
+        isDbHealthy = true;
+        dbMode = "cloud";
+        console.log("Supabase REST API is online and table exists. Cloud REST Mode activated!");
+        return;
+      } else if (res.status === 404) {
+        // Table not found but API is online.
+        isDbHealthy = false;
+        dbMode = "local";
+        console.warn("Table 'salary_records' not found in Supabase! Please run the SQL setup script in your Supabase dashboard.");
+        return;
+      } else {
+        const txt = await res.text();
+        console.error(`Supabase REST connection returned status ${res.status}: ${txt}`);
+      }
+    } catch (err: any) {
+      console.error("Supabase REST connection failed:", err.message);
+    }
+  }
+
+  dbMode = "local";
+  isDbHealthy = false;
+  console.log("Falling back to Local File fallback mode.");
 }
 
 // Bootstrap on startup
@@ -125,8 +227,9 @@ bootstrapDatabase();
 
 // API Helper to get all records
 async function getRecords() {
+  // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
-  if (pool && isDbHealthy) {
+  if (pool && isDbHealthy && dbMode === "cloud") {
     try {
       const res = await pool.query("SELECT * FROM salary_records ORDER BY id ASC");
       return res.rows.map(row => ({
@@ -150,8 +253,41 @@ async function getRecords() {
         isContractReady: row.is_contract_ready
       }));
     } catch (err) {
-      console.error("Error fetching from Postgres, loading fallback file:", err);
+      console.error("Error fetching from direct Postgres:", err);
       isDbHealthy = false;
+      dbMode = "local";
+    }
+  }
+
+  // Mode 2: Supabase REST API Fallback
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      const res = await supabaseFetch("/salary_records?select=*&order=id.asc");
+      const rows = await res.json();
+      return rows.map((row: any) => ({
+        id: row.id,
+        track: row.track,
+        year: row.year,
+        teacherName: row.teacher_name,
+        subject: row.subject,
+        semester: row.semester,
+        paymentMethod: row.payment_method,
+        shash: Number(row.shash),
+        meetings: row.meetings,
+        totalHours: row.total_hours,
+        rate: Number(row.rate),
+        employerOverhead: Number(row.employer_overhead),
+        totalAnnual: Number(row.total_annual),
+        tz: row.tz,
+        phone: row.phone,
+        email: row.email,
+        isApproved: row.is_approved,
+        isContractReady: row.is_contract_ready
+      }));
+    } catch (err) {
+      console.error("Error fetching from Supabase REST:", err);
+      isDbHealthy = false;
+      dbMode = "local";
     }
   }
 
@@ -166,8 +302,29 @@ async function getRecords() {
 
 // API Helper to save/update a record
 async function saveRecord(item: any) {
+  const dbPayload = {
+    track: item.track,
+    year: item.year,
+    teacher_name: item.teacherName,
+    subject: item.subject,
+    semester: item.semester,
+    payment_method: item.paymentMethod,
+    shash: item.shash,
+    meetings: item.meetings,
+    total_hours: item.totalHours,
+    rate: item.rate,
+    employer_overhead: item.employerOverhead,
+    total_annual: item.totalAnnual,
+    tz: item.tz,
+    phone: item.phone,
+    email: item.email,
+    is_approved: item.isApproved,
+    is_contract_ready: item.isContractReady
+  };
+
+  // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
-  if (pool && isDbHealthy) {
+  if (pool && isDbHealthy && dbMode === "cloud") {
     try {
       if (item.id && item.id > 0) {
         // Update existing record
@@ -203,8 +360,38 @@ async function saveRecord(item: any) {
         return { ...item, id: res.rows[0].id };
       }
     } catch (err) {
-      console.error("Error saving to Postgres, falling back to local file:", err);
-      isDbHealthy = false;
+      console.error("Error saving to Postgres direct, trying Supabase fallback or local:", err);
+    }
+  }
+
+  // Mode 2: Supabase REST API Fallback
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      if (item.id && item.id > 0) {
+        const res = await supabaseFetch(`/salary_records?id=eq.${item.id}`, {
+          method: "PATCH",
+          headers: { "Prefer": "return=representation" },
+          body: JSON.stringify(dbPayload)
+        });
+        const updatedRows = await res.json();
+        if (updatedRows && updatedRows.length > 0) {
+          return { ...item, id: updatedRows[0].id };
+        }
+        return item;
+      } else {
+        const res = await supabaseFetch("/salary_records", {
+          method: "POST",
+          headers: { "Prefer": "return=representation" },
+          body: JSON.stringify(dbPayload)
+        });
+        const insertedRows = await res.json();
+        if (insertedRows && insertedRows.length > 0) {
+          return { ...item, id: insertedRows[0].id };
+        }
+        return item;
+      }
+    } catch (err) {
+      console.error("Error saving to Supabase REST:", err);
     }
   }
 
@@ -228,14 +415,26 @@ async function saveRecord(item: any) {
 
 // API Helper to delete a record
 async function deleteRecord(id: number) {
+  // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
-  if (pool && isDbHealthy) {
+  if (pool && isDbHealthy && dbMode === "cloud") {
     try {
       await pool.query("DELETE FROM salary_records WHERE id = $1", [id]);
       return true;
     } catch (err) {
-      console.error("Error deleting from Postgres, falling back to local file:", err);
-      isDbHealthy = false;
+      console.error("Error deleting from Postgres direct:", err);
+    }
+  }
+
+  // Mode 2: Supabase REST API Fallback
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      await supabaseFetch(`/salary_records?id=eq.${id}`, {
+        method: "DELETE"
+      });
+      return true;
+    } catch (err) {
+      console.error("Error deleting from Supabase REST:", err);
     }
   }
 
@@ -277,6 +476,92 @@ app.delete("/api/records/:id", async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Passwords APIs
+app.get("/api/passwords", async (req, res) => {
+  // Mode 1: Direct Postgres
+  const pool = getDbPool();
+  if (pool && isDbHealthy && dbMode === "cloud") {
+    try {
+      const dbRes = await pool.query("SELECT value FROM system_config WHERE key = 'passwords'");
+      if (dbRes.rows.length > 0) {
+        const passwords = JSON.parse(dbRes.rows[0].value);
+        return res.json({ success: true, dbMode: "cloud", passwords });
+      }
+    } catch (err) {
+      console.error("Error reading passwords from direct DB:", err);
+    }
+  }
+
+  // Mode 2: Supabase REST API Fallback
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      const dbRes = await supabaseFetch("/system_config?key=eq.passwords&select=value");
+      const rows = await dbRes.json();
+      if (rows && rows.length > 0) {
+        const passwords = JSON.parse(rows[0].value);
+        return res.json({ success: true, dbMode: "cloud", passwords });
+      }
+    } catch (err) {
+      console.error("Error reading passwords from Supabase REST:", err);
+    }
+  }
+
+  // Fallback to local file
+  try {
+    const data = fs.readFileSync(LOCAL_PASSWORDS_PATH, "utf-8");
+    const passwords = JSON.parse(data);
+    return res.json({ success: true, dbMode: "local", passwords });
+  } catch (err) {
+    return res.json({ success: true, dbMode: "local", passwords: INITIAL_PASSWORDS });
+  }
+});
+
+app.post("/api/passwords", async (req, res) => {
+  const newPasswords = req.body;
+  const jsonStr = JSON.stringify(newPasswords);
+  let savedToDb = false;
+
+  // 1. Try to save in database via direct Postgres
+  const pool = getDbPool();
+  if (pool && isDbHealthy && dbMode === "cloud") {
+    try {
+      await pool.query(
+        `INSERT INTO system_config (key, value)
+         VALUES ('passwords', $1)
+         ON CONFLICT (key)
+         DO UPDATE SET value = EXCLUDED.value`,
+        [jsonStr]
+      );
+      savedToDb = true;
+    } catch (err) {
+      console.error("Error saving passwords to direct DB:", err);
+    }
+  }
+
+  // 2. Try to save in database via Supabase REST API
+  if (!savedToDb && hasSupabaseRest && dbMode === "cloud") {
+    try {
+      await supabaseFetch("/system_config", {
+        method: "POST",
+        headers: { "Prefer": "resolution=merge-duplicates" },
+        body: JSON.stringify({ key: "passwords", value: jsonStr })
+      });
+      savedToDb = true;
+    } catch (err) {
+      console.error("Error saving passwords to Supabase REST:", err);
+    }
+  }
+
+  // 3. Always write to local fallback
+  try {
+    fs.writeFileSync(LOCAL_PASSWORDS_PATH, JSON.stringify(newPasswords, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error writing passwords to local file:", err);
+  }
+
+  res.json({ success: true, dbMode: savedToDb ? "cloud" : "local", passwords: newPasswords });
 });
 
 // Endpoint to force reload of DB configuration if user sets/updates DATABASE_URL
