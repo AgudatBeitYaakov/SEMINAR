@@ -1899,7 +1899,9 @@ ____________________                    _____________________                   
                             <tr
                               key={item.id}
                               className={`transition-colors ${
-                                item.isContractReady
+                                activeEditingId === item.id
+                                  ? "bg-indigo-50/60 hover:bg-indigo-50/80 font-semibold"
+                                  : item.isContractReady
                                   ? "bg-violet-50/45 hover:bg-violet-50/70"
                                   : item.isApproved
                                   ? "bg-emerald-50/10 hover:bg-emerald-50/20"
@@ -1978,289 +1980,101 @@ ____________________                    _____________________                   
                                 </div>
                               </td>
 
-                              {/* Editable or View-Only Fields */}
-                              {isEditing ? (
-                                <>
-                                  {/* TRACK */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <select
-                                      value={editTrack}
-                                      onChange={(e) => setEditTrack(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white font-semibold"
-                                    >
-                                      {ALL_TRACKS.map((t) => (
-                                        <option key={t} value={t}>
-                                          {t}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  {/* YEAR */}
-                                  <td className="p-2 border-b border-slate-100 text-center align-middle">
-                                    <select
-                                      value={editYear}
-                                      onChange={(e) => setEditYear(e.target.value)}
-                                      className="text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white"
-                                    >
-                                      <option value="יג">יג</option>
-                                      <option value="יד">יד</option>
-                                      <option value="יג+יד">יג+יד</option>
-                                    </select>
-                                  </td>
-                                  {/* TEACHER NAME */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <input
-                                      type="text"
-                                      value={editTeacherName}
-                                      onChange={(e) => setEditTeacherName(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 bg-white"
-                                    />
-                                  </td>
-                                  {/* SUBJECT */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <input
-                                      type="text"
-                                      value={editSubject}
-                                      onChange={(e) => setEditSubject(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 bg-white"
-                                    />
-                                  </td>
-                                  {/* SEMESTER */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <select
-                                      value={editSemester}
-                                      onChange={(e) => setEditSemester(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white"
-                                    >
-                                      <option value="שנתי">שנתי</option>
-                                      <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
-                                      <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
-                                      <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
-                                      <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
-                                    </select>
-                                  </td>
-                                  {/* PAYMENT METHOD */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <select
-                                      value={editPaymentMethod}
-                                      onChange={(e) => setEditPaymentMethod(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white font-semibold"
-                                    >
-                                      <option value="תקן">תקן (+45%)</option>
-                                      <option value="שכר מרצים">שכר מרצים (+30%)</option>
-                                      <option value="קבלה">קבלה (+18%)</option>
-                                      <option value="קבלת פטור">קבלת פטור (0%)</option>
-                                    </select>
-                                  </td>
-                                  {/* SHASH */}
-                                  <td className="p-2 border-b border-slate-100 text-center align-middle">
-                                    <input
-                                      type="number"
-                                      value={editShash || ""}
-                                      onChange={(e) => setEditShash(parseFloat(e.target.value) || 0)}
-                                      className="w-14 text-center text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white"
-                                    />
-                                  </td>
-                                  {/* MEETINGS */}
-                                  <td className="p-2 border-b border-slate-100 text-center align-middle">
-                                    <input
-                                      type="number"
-                                      value={editMeetings || ""}
-                                      onChange={(e) => setEditMeetings(parseInt(e.target.value, 10) || 0)}
-                                      className="w-16 text-center text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white"
-                                    />
-                                  </td>
-                                  {/* TOTAL HOURS (CALCULATED LIVE) */}
-                                  <td className="p-3 border-b border-slate-100 text-center font-bold text-slate-800 bg-amber-50/5 align-middle">
-                                    {activeCalculatedVals.totalHours}
-                                  </td>
-                                  {/* RATE */}
-                                  <td className="p-2 border-b border-slate-100 text-center align-middle">
-                                    <input
-                                      type="number"
-                                      value={editRate || ""}
-                                      onChange={(e) => setEditRate(parseFloat(e.target.value) || 0)}
-                                      className="w-18 text-center text-xs border border-slate-200 rounded p-1 focus:outline-none bg-white"
-                                    />
-                                  </td>
-                                  {/* EMPLOYER OVERHEAD (CALCULATED LIVE) */}
-                                  <td className="p-3 border-b border-slate-100 text-center font-bold text-slate-800 bg-indigo-50/10 align-middle text-indigo-900">
-                                    ₪{activeCalculatedVals.employerOverhead.toLocaleString()}
-                                  </td>
-                                  {/* TOTAL ANNUAL (CALCULATED LIVE) */}
-                                  <td className="p-3 border-b border-slate-100 text-center font-extrabold text-indigo-900 bg-indigo-50/20 align-middle">
-                                    ₪{activeCalculatedVals.totalAnnual.toLocaleString()}
-                                  </td>
-                                  {/* TRAVEL EDIT */}
-                                  <td className="p-2 border-b border-slate-100 align-middle w-40">
-                                    <select
-                                      value={editTravel}
-                                      onChange={(e) => setEditTravel(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none bg-white font-medium"
-                                    >
-                                      <option value="בית שמש">בית שמש</option>
-                                      <option value="ירושלים">ירושלים</option>
-                                      <option value="בני ברק">בני ברק</option>
-                                      <option value="אלעד">אלעד</option>
-                                      <option value="מודיעין עילית">מודיעין עילית</option>
-                                      <option value="אחר / ללא">אחר / ללא</option>
-                                    </select>
-                                  </td>
-                                  {/* GRADE TIMING EDIT */}
-                                  <td className="p-2 border-b border-slate-100 align-middle w-48">
-                                    <select
-                                      value={editGradeTiming}
-                                      onChange={(e) => setEditGradeTiming(e.target.value)}
-                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none bg-white font-medium"
-                                    >
-                                      <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
-                                      <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
-                                      <option value="ללא ציון (סדנה/ערב)">ללא ציון (סדנה/ערב)</option>
-                                    </select>
-                                  </td>
-                                  {/* TZ */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <input
-                                      type="text"
-                                      value={editTz}
-                                      onChange={(e) => setEditTz(e.target.value)}
-                                      className="w-full text-center text-xs border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 bg-white"
-                                    />
-                                  </td>
-                                  {/* PHONE */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <input
-                                      type="text"
-                                      value={editPhone}
-                                      onChange={(e) => setEditPhone(e.target.value)}
-                                      className="w-full text-center text-xs border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 bg-white"
-                                    />
-                                  </td>
-                                  {/* EMAIL */}
-                                  <td className="p-2 border-b border-slate-100 align-middle">
-                                    <input
-                                      type="text"
-                                      value={editEmail}
-                                      onChange={(e) => setEditEmail(e.target.value)}
-                                      className="w-full text-center text-xs border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500 bg-white font-mono"
-                                    />
-                                  </td>
-                                  {/* INLINE EDIT ACTIONS */}
-                                  <td className="p-2 border-b border-slate-100 text-center align-middle bg-slate-50/30">
-                                    <div className="flex items-center justify-center gap-1.5">
-                                      <button
-                                        onClick={() => handleSaveRow(item.id)}
-                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-2.5 py-1 rounded transition cursor-pointer"
-                                      >
-                                        שמירה
-                                      </button>
-                                      <button
-                                        onClick={() => handleCancelEdit(item.id)}
-                                        className="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-[10px] px-2.5 py-1 rounded transition cursor-pointer"
-                                      >
-                                        ביטול
-                                      </button>
-                                    </div>
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  <td className="p-3.5 border-b border-slate-100 font-semibold text-slate-700 align-middle">
-                                    {item.track}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
-                                    {item.year}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 font-bold text-slate-900 max-w-[220px] truncate align-middle">
-                                    {item.teacherName || "—"}
-                                    {multipleJobsBadge}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 font-medium text-slate-800 max-w-[220px] truncate align-middle">
-                                    {item.subject || "—"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-slate-600 align-middle">
-                                    {item.semester || "שנתי"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center align-middle">
-                                    <span
-                                      className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
-                                        item.paymentMethod === "תקן"
-                                          ? "bg-indigo-50 text-indigo-800 border border-indigo-100"
-                                          : item.paymentMethod === "שכר מרצים"
-                                          ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
-                                          : item.paymentMethod === "קבלה"
-                                          ? "bg-amber-50 text-amber-800 border border-amber-100"
-                                          : "bg-blue-50 text-blue-800 border border-blue-100"
-                                      }`}
-                                    >
-                                      {item.paymentMethod}
-                                      {item.paymentMethod === "תקן"
-                                        ? " (+45%)"
-                                        : item.paymentMethod === "שכר מרצים"
-                                        ? " (+30%)"
-                                        : item.paymentMethod === "קבלה"
-                                        ? " (+18%)"
-                                        : " (0%)"}
-                                    </span>
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
-                                    {item.shash}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
-                                    {item.meetings}{" "}
-                                    <span className="text-[10px] text-slate-400 block">
-                                      {item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}
-                                    </span>
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
-                                    {item.totalHours}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-semibold align-middle">
-                                    ₪{item.rate}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-indigo-50/30 align-middle">
-                                    ₪{item.employerOverhead.toLocaleString()}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
-                                    ₪{item.totalAnnual.toLocaleString()}
-                                  </td>
-                                  {/* TRAVEL DISPLAY */}
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
-                                    {item.travel || "בית שמש"}
-                                  </td>
-                                  {/* GRADE TIMING DISPLAY */}
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
-                                    {item.gradeTiming || "ציון אחד בסוף שנה"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center font-mono align-middle">
-                                    {item.tz || "—"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center align-middle">
-                                    {item.phone || "—"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 max-w-[180px] truncate align-middle">
-                                    {item.email || "—"}
-                                  </td>
-                                  <td className="p-3.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={() => handleEditRowStart(item)}
-                                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold p-1.5 rounded transition cursor-pointer"
-                                        title="עריכת נתונים"
-                                      >
-                                        <Edit2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteRow(item.id, item.teacherName)}
-                                        className="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold p-1.5 rounded transition cursor-pointer"
-                                        title="מחיקת שורה"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </>
-                              )}
+                              {/* View-Only Columns */}
+                              <td className="p-3.5 border-b border-slate-100 font-semibold text-slate-700 align-middle">
+                                {item.track}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
+                                {item.year}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 font-bold text-slate-900 max-w-[220px] truncate align-middle">
+                                {item.teacherName || "—"}
+                                {multipleJobsBadge}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 font-medium text-slate-800 max-w-[220px] truncate align-middle">
+                                {item.subject || "—"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-slate-600 align-middle">
+                                {item.semester || "שנתי"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center align-middle">
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
+                                    item.paymentMethod === "תקן"
+                                      ? "bg-indigo-50 text-indigo-800 border border-indigo-100"
+                                      : item.paymentMethod === "שכר מרצים"
+                                      ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
+                                      : item.paymentMethod === "קבלה"
+                                      ? "bg-amber-50 text-amber-800 border border-amber-100"
+                                      : "bg-blue-50 text-blue-800 border border-blue-100"
+                                  }`}
+                                >
+                                  {item.paymentMethod}
+                                  {item.paymentMethod === "תקן"
+                                    ? " (+45%)"
+                                    : item.paymentMethod === "שכר מרצים"
+                                    ? " (+30%)"
+                                    : item.paymentMethod === "קבלה"
+                                    ? " (+18%)"
+                                    : " (0%)"}
+                                </span>
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
+                                {item.shash}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
+                                {item.meetings}{" "}
+                                <span className="text-[10px] text-slate-400 block">
+                                  {item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}
+                                </span>
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
+                                {item.totalHours}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-semibold align-middle">
+                                ₪{item.rate}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-indigo-50/30 align-middle">
+                                ₪{item.employerOverhead.toLocaleString()}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
+                                ₪{item.totalAnnual.toLocaleString()}
+                              </td>
+                              {/* TRAVEL DISPLAY */}
+                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                                {item.travel || "בית שמש"}
+                              </td>
+                              {/* GRADE TIMING DISPLAY */}
+                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                                {item.gradeTiming || "ציון אחד בסוף שנה"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center font-mono align-middle">
+                                {item.tz || "—"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center align-middle">
+                                {item.phone || "—"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 max-w-[180px] truncate align-middle">
+                                {item.email || "—"}
+                              </td>
+                              <td className="p-3.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => handleEditRowStart(item)}
+                                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                    title="עריכת נתונים"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteRow(item.id, item.teacherName)}
+                                    className="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                    title="מחיקת שורה"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })
@@ -2908,6 +2722,306 @@ ____________________                    _____________________                   
                 className="bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium text-xs px-5 py-1.5 rounded-lg transition cursor-pointer shadow-sm h-9"
               >
                 סגירה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. ADD / EDIT RECORD MODAL (NO HORIZONTAL SCROLLING EXPERIENCE 🚀) */}
+      {activeEditingId !== null && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-8 animate-in fade-in-50 zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeEditingId < 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                  {activeEditingId < 0 ? <Plus className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-850">
+                    {activeEditingId < 0 ? "הוספת משרה חדשה - תשפ\"ז 🌾" : "עריכת פרטי משרה"}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {activeEditingId < 0 ? "מילוי פרטי העסקה ושכר למורה חדשה בסמינר" : `עדכון נתוני השכר והתפקיד של ${editTeacherName || "המורה"}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => handleCancelEdit(activeEditingId)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Form Fields Body */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-6">
+              {/* Alert notice about required fields */}
+              <div className="p-3 bg-amber-50 text-amber-900 border border-amber-200/60 rounded-xl text-xs flex items-start gap-2">
+                <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                <div className="font-normal leading-relaxed text-right">
+                  שימו לב: שדות המסומנים ב-<strong>*</strong> הם שדות חובה. לא ניתן לשמור שורת מורה ללא מספר טלפון ואימייל תקינים!
+                </div>
+              </div>
+
+              {/* SECTION 1: Teacher's Identity & Contact */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-400 mb-3 tracking-wider uppercase flex items-center gap-1.5 justify-start">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span>פרטי זהות וקשר של המורה</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המורה *</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: שרה כהן"
+                      value={editTeacherName}
+                      onChange={(e) => setEditTeacherName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">תעודת זהות מורה</label>
+                    <input
+                      type="text"
+                      placeholder="9 ספרות"
+                      value={editTz}
+                      onChange={(e) => setEditTz(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white text-center font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">טלפון נייד *</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: 0501234567"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white text-center font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">כתובת אימייל *</label>
+                    <input
+                      type="email"
+                      placeholder="name@domain.com"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-mono text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: Academic details */}
+              <div className="border-t border-slate-100 pt-5">
+                <h4 className="text-xs font-bold text-slate-400 mb-3 tracking-wider uppercase flex items-center gap-1.5 justify-start">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span>פרטי משרה והתמחות</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">מסלול התמחות / מחלקה</label>
+                    {role === "coordinator" ? (
+                      <div className="w-full px-3 py-2 border border-slate-100 rounded-lg text-xs bg-slate-50 text-slate-500 font-bold">
+                        {editTrack}
+                      </div>
+                    ) : (
+                      <select
+                        value={editTrack}
+                        onChange={(e) => setEditTrack(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                      >
+                        {ALL_TRACKS.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שנת לימודים</label>
+                    <select
+                      value={editYear}
+                      onChange={(e) => setEditYear(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                    >
+                      <option value="יג">שנה יג</option>
+                      <option value="יד">שנה יד</option>
+                      <option value="יג+יד">שנה יג+יד</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המקצוע *</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: פסיכולוגיה התפתחותית"
+                      value={editSubject}
+                      onChange={(e) => setEditSubject(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">סמסטר / מחזור</label>
+                    <select
+                      value={editSemester}
+                      onChange={(e) => setEditSemester(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                    >
+                      <option value="שנתי">שנתי</option>
+                      <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
+                      <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
+                      <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
+                      <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 3: Cost and calculations */}
+              <div className="border-t border-slate-100 pt-5">
+                <h4 className="text-xs font-bold text-slate-400 mb-3 tracking-wider uppercase flex items-center gap-1.5 justify-start">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                  <span>נתוני שכר, הגעה וציונים</span>
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">צורת תשלום</label>
+                    <select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                    >
+                      <option value="תקן">תקן (+45% תקורות)</option>
+                      <option value="שכר מרצים">שכר מרצים (+30% תקורות)</option>
+                      <option value="קבלה">קבלה (+18% תקורות)</option>
+                      <option value="קבלת פטור">קבלת פטור (0% תקורות)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שעות שבועיות (ש"ש)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0"
+                      value={editShash || ""}
+                      onChange={(e) => setEditShash(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">
+                      {editPaymentMethod === "תקן" ? "מספר חודשים בשנה" : "מספר מפגשים שנתי"}
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={editMeetings || ""}
+                      onChange={(e) => setEditMeetings(parseInt(e.target.value, 10) || 0)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">תעריף יסוד לשעה (ש"ח)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="0"
+                      value={editRate || ""}
+                      onChange={(e) => setEditRate(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">נסיעות (עיר מוצא)</label>
+                    <select
+                      value={editTravel}
+                      onChange={(e) => setEditTravel(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-medium"
+                    >
+                      <option value="בית שמש">בית שמש</option>
+                      <option value="ירושלים">ירושלים</option>
+                      <option value="בני ברק">בני ברק</option>
+                      <option value="אלעד">אלעד</option>
+                      <option value="מודיעין עילית">מודיעין עילית</option>
+                      <option value="אחר / ללא">אחר / ללא</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">מועד נתינת ציון</label>
+                    <select
+                      value={editGradeTiming}
+                      onChange={(e) => setEditGradeTiming(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-medium"
+                    >
+                      <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
+                      <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
+                      <option value="ללא ציון (סדנה/ערב)">ללא ציון (סדנה/ערב)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* LIVE CALCULATIONS SUMMARY PANEL */}
+              <div className="bg-indigo-50 border border-indigo-150 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                <div className="text-right">
+                  <div className="font-bold text-indigo-950 flex items-center gap-1 justify-start">
+                    <span>סיכום חישוב שכר ותקורות חי ⚡</span>
+                  </div>
+                  <p className="text-[10px] text-indigo-700/80 mt-0.5">
+                    הנוסחאות מחושבות ומשוערכות אוטומטית בהתאם לצורת התשלום הנבחרת.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-6 text-center w-full sm:w-auto shrink-0 border-t sm:border-t-0 sm:border-r border-indigo-150 pt-3 sm:pt-0 sm:pr-4">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">שעות שנתיות</span>
+                    <strong className="text-sm font-black text-slate-800">
+                      {computeCalculations(editShash, editMeetings, editRate, editPaymentMethod).totalHours} שעות
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">עלות מעביד לשעה</span>
+                    <strong className="text-sm font-black text-slate-800">
+                      ₪{computeCalculations(editShash, editMeetings, editRate, editPaymentMethod).employerOverhead.toFixed(2)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-indigo-700 block">סה"כ שנתי שכר</span>
+                    <strong className="text-sm font-black text-indigo-900 bg-indigo-100/80 px-2 py-0.5 rounded border border-indigo-200/50">
+                      ₪{computeCalculations(editShash, editMeetings, editRate, editPaymentMethod).totalAnnual.toLocaleString()}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button
+                onClick={() => handleCancelEdit(activeEditingId)}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs px-4 py-2 rounded-lg transition cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                onClick={() => handleSaveRow(activeEditingId)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-lg shadow-sm transition cursor-pointer"
+              >
+                {activeEditingId < 0 ? "הוספת משרה" : "שמירת שינויים"}
               </button>
             </div>
           </div>
