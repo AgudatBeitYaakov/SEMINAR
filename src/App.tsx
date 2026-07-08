@@ -64,7 +64,12 @@ export default function App() {
   // Database Connection State
   const [dbMode, setDbMode] = useState<"cloud" | "local">("local");
   const [customDbUrl, setCustomDbUrl] = useState("");
+  const [supabaseUrl, setSupabaseUrl] = useState(() => localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "");
+  const [supabaseKey, setSupabaseKey] = useState(() => localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
+  const [cloudConnectionStyle, setCloudConnectionStyle] = useState<"express" | "direct" | "none">("none");
   const [showDbConfigModal, setShowDbConfigModal] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string; type: "success" | "error" | "warning" } | null>(null);
 
   // Records and Data State
   const [records, setRecords] = useState<SalaryRecord[]>([]);
@@ -106,6 +111,52 @@ export default function App() {
   const [alertConfig, setAlertConfig] = useState<{ show: boolean; text: string; type: "success" | "error" | "info"; title: string } | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{ show: boolean; text: string; onConfirm: () => void } | null>(null);
 
+  // DB payload mapping helpers
+  const mapRecordToDb = (item: any) => {
+    return {
+      track: item.track,
+      year: item.year,
+      teacher_name: item.teacherName,
+      subject: item.subject,
+      semester: item.semester,
+      payment_method: item.paymentMethod,
+      shash: item.shash,
+      meetings: item.meetings,
+      total_hours: item.totalHours,
+      rate: item.rate,
+      employer_overhead: item.employerOverhead,
+      total_annual: item.totalAnnual,
+      tz: item.tz,
+      phone: item.phone,
+      email: item.email,
+      is_approved: item.isApproved,
+      is_contract_ready: item.isContractReady
+    };
+  };
+
+  const mapDbToRecord = (dbItem: any): SalaryRecord => {
+    return {
+      id: dbItem.id,
+      track: dbItem.track,
+      year: dbItem.year,
+      teacherName: dbItem.teacher_name,
+      subject: dbItem.subject,
+      semester: dbItem.semester,
+      paymentMethod: dbItem.payment_method,
+      shash: Number(dbItem.shash || 0),
+      meetings: Number(dbItem.meetings || 0),
+      totalHours: Number(dbItem.total_hours || 0),
+      rate: Number(dbItem.rate || 0),
+      employerOverhead: Number(dbItem.employer_overhead || 0),
+      totalAnnual: Number(dbItem.total_annual || 0),
+      tz: dbItem.tz || "",
+      phone: dbItem.phone || "",
+      email: dbItem.email || "",
+      isApproved: Boolean(dbItem.is_approved),
+      isContractReady: Boolean(dbItem.is_contract_ready)
+    };
+  };
+
   // Load configuration from LocalStorage and backend API on mount
   useEffect(() => {
     // Passwords fast local fallback
@@ -122,6 +173,12 @@ export default function App() {
       setCustomDbUrl(savedUrl);
     }
 
+    // Initialize Supabase Url and Key from LocalStorage or Environment
+    const storedSupUrl = localStorage.getItem("sz_supabase_url");
+    const storedSupKey = localStorage.getItem("sz_supabase_key");
+    if (storedSupUrl) setSupabaseUrl(storedSupUrl);
+    if (storedSupKey) setSupabaseKey(storedSupKey);
+
     fetchPasswords();
     fetchRecords();
   }, []);
@@ -129,29 +186,107 @@ export default function App() {
   const fetchPasswords = async () => {
     try {
       const response = await fetch("/api/passwords");
+      if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success && data.passwords) {
         setPasswords(data.passwords);
         localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
+        setCloudConnectionStyle("express");
+        setDbMode(data.dbMode || "cloud");
       }
     } catch (err) {
-      console.error("API error fetching passwords", err);
+      console.warn("API error fetching passwords, attempting direct Supabase fetch:", err);
+      // Fallback to direct client-side Supabase REST
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      if (sUrl && sKey) {
+        try {
+          const directUrl = `${sUrl}/rest/v1/system_config?key=eq.passwords&select=value`;
+          const res = await fetch(directUrl, {
+            headers: {
+              "apikey": sKey,
+              "Authorization": `Bearer ${sKey}`
+            }
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            if (rows && rows.length > 0) {
+              const parsedPasswords = JSON.parse(rows[0].value);
+              setPasswords(parsedPasswords);
+              localStorage.setItem("sz_passwords_store_v2", JSON.stringify(parsedPasswords));
+              setCloudConnectionStyle("direct");
+              setDbMode("cloud");
+              return;
+            }
+          }
+        } catch (directErr) {
+          console.error("Direct Supabase fetch passwords failed:", directErr);
+        }
+      }
+      // If all cloud pathways fail, fallback to localStorage passwords
+      const saved = localStorage.getItem("sz_passwords_store_v2");
+      if (saved) {
+        try { setPasswords(JSON.parse(saved)); } catch (e) {}
+      }
     }
   };
 
-  // Fetch from Express Server
+  // Fetch from Express Server or Supabase Direct REST
   const fetchRecords = async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/records");
+      if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success) {
         setRecords(data.records);
         setDbMode(data.dbMode);
+        setCloudConnectionStyle("express");
+        return;
       }
+      throw new Error("Backend response error status");
     } catch (err) {
-      console.error("API error, operating in local fallback state", err);
+      console.warn("API error, checking direct Supabase connection:", err);
+      
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      
+      if (sUrl && sKey) {
+        try {
+          const directUrl = `${sUrl}/rest/v1/salary_records?select=*&order=id.asc`;
+          const res = await fetch(directUrl, {
+            headers: {
+              "apikey": sKey,
+              "Authorization": `Bearer ${sKey}`
+            }
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            if (Array.isArray(rows)) {
+              const mapped = rows.map(mapDbToRecord);
+              setRecords(mapped);
+              setDbMode("cloud");
+              setCloudConnectionStyle("direct");
+              localStorage.setItem("sz_local_records_v2", JSON.stringify(mapped));
+              return;
+            }
+          }
+        } catch (directErr) {
+          console.error("Direct Supabase fetch records failed:", directErr);
+        }
+      }
+
+      // Local storage fallback if no internet or no cloud config
+      const localData = localStorage.getItem("sz_local_records_v2");
+      if (localData) {
+        try {
+          setRecords(JSON.parse(localData));
+        } catch (e) {}
+      } else {
+        setRecords([]);
+      }
       setDbMode("local");
+      setCloudConnectionStyle("none");
     } finally {
       setLoading(false);
     }
@@ -229,32 +364,183 @@ export default function App() {
     setConfirmConfig({ show: true, text, onConfirm });
   };
 
-  // Save database URL custom configuration to Express backend
+  // Save database URL custom configuration to Express backend and LocalStorage
   const handleSaveDbUrl = async () => {
+    // Save to LocalStorage for direct client-side fallback
+    localStorage.setItem("sz_cloud_api_url_v2", customDbUrl);
+    localStorage.setItem("sz_supabase_url", supabaseUrl);
+    localStorage.setItem("sz_supabase_key", supabaseKey);
+
+    // If direct Supabase is configured, set dbMode to cloud immediately as a baseline
+    if (supabaseUrl && supabaseKey) {
+      setDbMode("cloud");
+      setCloudConnectionStyle("direct");
+    }
+
     try {
       const response = await fetch("/api/configure-db", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ databaseUrl: customDbUrl }),
       });
-      const data = await response.json();
-      if (data.success) {
-        localStorage.setItem("sz_cloud_api_url_v2", customDbUrl);
-        setDbMode(data.dbMode);
-        triggerAlert("החיבור לענן גוגל שיטס / Supabase עודכן בהצלחה!", "success", "עדכון חיבור");
-        setShowDbConfigModal(false);
-        fetchRecords();
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setDbMode(data.dbMode);
+          setCloudConnectionStyle("express");
+          triggerAlert("החיבור לענן Supabase עודכן בהצלחה בשרת ובדפדפן!", "success", "עדכון חיבור");
+        } else {
+          triggerAlert("העדכון בשרת נכשל, אך הנתונים נשמרו מקומית בדפדפן.", "info", "עדכון חיבור");
+        }
       } else {
-        triggerAlert("העדכון נכשל, ודאי שהקישור תקין", "error", "שגיאת חיבור");
+        throw new Error("Express backend returned non-ok status");
       }
     } catch (e) {
-      triggerAlert("תקלת תקשורת מול השרת", "error");
+      console.warn("Could not save to Express backend, saved to client-side storage instead:", e);
+      if (supabaseUrl && supabaseKey) {
+        triggerAlert("החיבור הישיר ל-Supabase API נשמר בהצלחה בדפדפן (מצב ענן ישיר)!", "success", "חיבור ישיר פעיל");
+      } else if (customDbUrl) {
+        triggerAlert("הגדרות החיבור נשמרו בדפדפן, אך לא נמצא שרת Express פעיל לעדכון.", "info", "חיבור שמור");
+      } else {
+        triggerAlert("ההגדרות נשמרו בדפדפן.", "success");
+      }
+    } finally {
+      setShowDbConfigModal(false);
+      fetchRecords();
+      fetchPasswords();
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+
+    const sUrl = supabaseUrl.trim();
+    const sKey = supabaseKey.trim();
+
+    if (!sUrl && !sKey && !customDbUrl) {
+      setConnectionTestResult({
+        success: false,
+        type: "error",
+        message: "אנא הזיני כתובת URL ומפתח Supabase או מחרוזת חיבור PostgreSQL לבדיקה."
+      });
+      setTestingConnection(false);
+      return;
+    }
+
+    try {
+      // 1. Check direct Supabase REST Connection
+      if (sUrl && sKey) {
+        try {
+          const cleanUrl = sUrl.endsWith("/") ? sUrl.slice(0, -1) : sUrl;
+          const directUrl = `${cleanUrl}/rest/v1/salary_records?select=id&limit=1`;
+          const res = await fetch(directUrl, {
+            headers: {
+              "apikey": sKey,
+              "Authorization": `Bearer ${sKey}`
+            }
+          });
+
+          if (res.ok) {
+            setConnectionTestResult({
+              success: true,
+              type: "success",
+              message: "🎉 החיבור הישיר ל-Supabase הצליח! מסד הנתונים מגיב וטבלת השכר (salary_records) קיימת ופעילה."
+            });
+          } else if (res.status === 404) {
+            setConnectionTestResult({
+              success: false,
+              type: "warning",
+              message: "⚠️ החיבור ל-Supabase הצליח, אך הטבלה 'salary_records' לא נמצאה. אנא ודאי שהרצת את סקריפט ה-SQL ב-Supabase SQL Editor ליצירת הטבלאות (ראי הנחיות ב-AGENTS.md)."
+            });
+          } else if (res.status === 401 || res.status === 403) {
+            setConnectionTestResult({
+              success: false,
+              type: "error",
+              message: "❌ שגיאת הרשאה (401/403). אנא ודאי שמפתח ה-Anon Key או ה-Service Key שהזנת תקין."
+            });
+          } else {
+            const errTxt = await res.text();
+            setConnectionTestResult({
+              success: false,
+              type: "error",
+              message: `❌ שגיאה בחיבור ל-Supabase (קוד ${res.status}): ${errTxt}`
+            });
+          }
+          setTestingConnection(false);
+          return;
+        } catch (directErr: any) {
+          console.error("Direct connection test error:", directErr);
+          setConnectionTestResult({
+            success: false,
+            type: "error",
+            message: `❌ שגיאת רשת בחיבור הישיר ל-Supabase: ${directErr.message || "לא ניתן לגשת לשרת. ודאי שהכתובת תקינה ואין חסימת CORS."}`
+          });
+          setTestingConnection(false);
+          return;
+        }
+      }
+
+      // 2. Fallback to testing backend Express connection if customDbUrl is filled
+      if (customDbUrl) {
+        try {
+          const response = await fetch("/api/configure-db", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ databaseUrl: customDbUrl }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.dbMode === "cloud") {
+              setConnectionTestResult({
+                success: true,
+                type: "success",
+                message: "🎉 חיבור השרת ל-PostgreSQL/Supabase דרך Express עודכן ופעיל בהצלחה!"
+              });
+            } else {
+              setConnectionTestResult({
+                success: false,
+                type: "warning",
+                message: "⚠️ שרת ה-Express השיב בהצלחה, אך המערכת עובדת במצב מקומי. ודאי שמחרוזת ה-DATABASE_URL תקינה ופעילה."
+              });
+            }
+          } else {
+            setConnectionTestResult({
+              success: false,
+              type: "error",
+              message: "❌ שרת ה-Express האחורי לא הצליח לעדכן את החיבור (שגיאת שרת)."
+            });
+          }
+        } catch (serverErr: any) {
+          setConnectionTestResult({
+            success: false,
+            type: "error",
+            message: `❌ שגיאת תקשורת מול שרת ה-Express האחורי: ${serverErr.message || "השרת אינו זמין."}`
+          });
+        }
+      }
+
+    } catch (globalErr: any) {
+      setConnectionTestResult({
+        success: false,
+        type: "error",
+        message: `❌ שגיאה בלתי צפויה: ${globalErr.message || globalErr}`
+      });
+    } finally {
+      setTestingConnection(false);
     }
   };
 
   const handleClearDbUrl = async () => {
     setCustomDbUrl("");
+    setSupabaseUrl("");
+    setSupabaseKey("");
     localStorage.removeItem("sz_cloud_api_url_v2");
+    localStorage.removeItem("sz_supabase_url");
+    localStorage.removeItem("sz_supabase_key");
+    setCloudConnectionStyle("none");
+
     try {
       await fetch("/api/configure-db", {
         method: "POST",
@@ -263,11 +549,13 @@ export default function App() {
       });
       setDbMode("local");
       triggerAlert("חיבור הענן בוטל. האפליקציה פועלת כעת במצב מקומי.", "info", "ניתוק חיבור");
+    } catch (e) {
+      console.warn("Express backend disconnect failed, cleared local client-side configuration:", e);
+      setDbMode("local");
+      triggerAlert("חיבור הענן בוטל בדפדפן. האפליקציה פועלת כעת במצב מקומי.", "info", "ניתוק חיבור");
+    } finally {
       setShowDbConfigModal(false);
       fetchRecords();
-    } catch (e) {
-      setDbMode("local");
-      setShowDbConfigModal(false);
     }
   };
 
@@ -405,16 +693,89 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedRow),
       });
+      if (!response.ok) throw new Error("Express backend not available or returned error");
       const data = await response.json();
       if (data.success) {
         triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה במערכת!`, "success", "נשמר בהצלחה");
         setActiveEditingId(null);
         fetchRecords();
-      } else {
-        triggerAlert("שגיאה בשמירת השורה", "error");
+        return;
       }
+      throw new Error("Express backend returned unsuccessful response");
     } catch (err) {
-      triggerAlert("תקלת רשת בשמירה", "error");
+      console.warn("Express backend save failed, attempting direct Supabase save:", err);
+      
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      
+      if (sUrl && sKey) {
+        try {
+          const dbPayload = mapRecordToDb(updatedRow);
+          let res;
+          if (id > 0) {
+            // PATCH existing record
+            res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${id}`, {
+              method: "PATCH",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+              },
+              body: JSON.stringify(dbPayload)
+            });
+          } else {
+            // POST new record
+            res = await fetch(`${sUrl}/rest/v1/salary_records`, {
+              method: "POST",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`,
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+              },
+              body: JSON.stringify(dbPayload)
+            });
+          }
+
+          if (res.ok) {
+            const rows = await res.json();
+            const savedItem = rows && rows.length > 0 ? mapDbToRecord(rows[0]) : updatedRow;
+            triggerAlert(`משרת המורה "${savedItem.teacherName}" נשמרה בהצלחה ישירות בענן!`, "success", "נשמר בהצלחה");
+            setActiveEditingId(null);
+            fetchRecords();
+            return;
+          } else {
+            const errText = await res.text();
+            throw new Error(`Supabase REST error: ${res.status} - ${errText}`);
+          }
+        } catch (directErr) {
+          console.error("Direct Supabase save failed:", directErr);
+        }
+      }
+
+      // Local storage fallback as last resort
+      try {
+        const localData = localStorage.getItem("sz_local_records_v2");
+        let localRows: any[] = [];
+        if (localData) {
+          localRows = JSON.parse(localData);
+        }
+
+        if (id > 0) {
+          localRows = localRows.map((r: any) => r.id === id ? updatedRow : r);
+        } else {
+          const nextId = localRows.length > 0 ? Math.max(...localRows.map((r: any) => r.id || 0)) + 1 : 1;
+          localRows.push({ ...updatedRow, id: nextId });
+        }
+
+        localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+        triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה במחשב זה (מצב מקומי)!`, "success", "נשמר מקומית");
+        setActiveEditingId(null);
+        fetchRecords();
+      } catch (localErr) {
+        triggerAlert("שגיאה בשמירת הנתונים מקומית", "error");
+      }
     } finally {
       setLoading(false);
     }
@@ -427,15 +788,50 @@ export default function App() {
         const response = await fetch(`/api/records/${id}`, {
           method: "DELETE",
         });
+        if (!response.ok) throw new Error("Express backend not available");
         const data = await response.json();
         if (data.success) {
           triggerAlert("השורה נמחקה בהצלחה מהמערכת.", "success");
           fetchRecords();
-        } else {
-          triggerAlert("שגיאה במחיקת השורה", "error");
+          return;
         }
+        throw new Error("Backend delete failed status");
       } catch (err) {
-        triggerAlert("שגיאת תקשורת במחיקה", "error");
+        console.warn("Express backend delete failed, trying direct Supabase delete:", err);
+
+        const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+        if (sUrl && sKey) {
+          try {
+            const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${id}`, {
+              method: "DELETE",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`
+              }
+            });
+            if (res.ok) {
+              triggerAlert("השורה נמחקה בהצלחה מהענן!", "success");
+              fetchRecords();
+              return;
+            }
+          } catch (directErr) {
+            console.error("Direct Supabase delete failed:", directErr);
+          }
+        }
+
+        // Local storage delete
+        try {
+          const localData = localStorage.getItem("sz_local_records_v2");
+          if (localData) {
+            const localRows = JSON.parse(localData);
+            const filtered = localRows.filter((r: any) => r.id !== id);
+            localStorage.setItem("sz_local_records_v2", JSON.stringify(filtered));
+            triggerAlert("השורה נמחקה בהצלחה ממחשב זה (מצב מקומי).", "success");
+          }
+        } catch (e) {}
+        fetchRecords();
       } finally {
         setLoading(false);
       }
@@ -459,6 +855,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedRow),
       });
+      if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success) {
         triggerAlert(
@@ -466,9 +863,54 @@ export default function App() {
           "success"
         );
         fetchRecords();
+        return;
       }
+      throw new Error("Backend approval toggle returned unsuccessful response");
     } catch (e) {
-      triggerAlert("שגיאה בעדכון סטטוס אישור", "error");
+      console.warn("Express backend toggle approval failed, trying direct Supabase:", e);
+
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+      if (sUrl && sKey) {
+        try {
+          const dbPayload = mapRecordToDb(updatedRow);
+          const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${id}`, {
+            method: "PATCH",
+            headers: {
+              "apikey": sKey,
+              "Authorization": `Bearer ${sKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(dbPayload)
+          });
+          if (res.ok) {
+            triggerAlert(
+              `משרת המורה "${row.teacherName}" ${approvedStatus ? "אושרה לתשלום בענן!" : "הועברה חזרה למצב ממתין לאישור בענן."}`,
+              "success"
+            );
+            fetchRecords();
+            return;
+          }
+        } catch (directErr) {
+          console.error("Direct Supabase toggle approval failed:", directErr);
+        }
+      }
+
+      // Local storage toggle approval fallback
+      try {
+        const localData = localStorage.getItem("sz_local_records_v2");
+        if (localData) {
+          const localRows = JSON.parse(localData);
+          const updated = localRows.map((r: any) => r.id === id ? updatedRow : r);
+          localStorage.setItem("sz_local_records_v2", JSON.stringify(updated));
+          triggerAlert(
+            `משרת המורה "${row.teacherName}" ${approvedStatus ? "אושרה לתשלום מקומית!" : "הועברה חזרה למצב ממתין לאישור מקומית."}`,
+            "success"
+          );
+        }
+      } catch (errLocal) {}
+      fetchRecords();
     } finally {
       setLoading(false);
     }
@@ -482,18 +924,68 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(passwords)
       });
+      if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success && data.passwords) {
         setPasswords(data.passwords);
         localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
         triggerAlert("הסיסמאות עודכנו ונשמרו בהצלחה במסד הנתונים ובמערכת!", "success");
-      } else {
-        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
-        triggerAlert("הסיסמאות עודכנו מקומית!", "info");
+        return;
       }
+      throw new Error("Backend passwords save failed status");
     } catch (e) {
+      console.warn("Express backend save passwords failed, trying direct Supabase save:", e);
+
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+      if (sUrl && sKey) {
+        try {
+          // Check if key exists
+          const checkRes = await fetch(`${sUrl}/rest/v1/system_config?key=eq.passwords`, {
+            headers: {
+              "apikey": sKey,
+              "Authorization": `Bearer ${sKey}`
+            }
+          });
+          const rows = await checkRes.json();
+          let saveRes;
+          if (rows && rows.length > 0) {
+            // PATCH existing key
+            saveRes = await fetch(`${sUrl}/rest/v1/system_config?key=eq.passwords`, {
+              method: "PATCH",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ value: JSON.stringify(passwords) })
+            });
+          } else {
+            // POST new key
+            saveRes = await fetch(`${sUrl}/rest/v1/system_config`, {
+              method: "POST",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ key: "passwords", value: JSON.stringify(passwords) })
+            });
+          }
+
+          if (saveRes.ok) {
+            localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
+            triggerAlert("הסיסמאות עודכנו ונשמרו בהצלחה בענן!", "success");
+            return;
+          }
+        } catch (directErr) {
+          console.error("Direct Supabase passwords save failed:", directErr);
+        }
+      }
+
       localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
-      triggerAlert("שגיאה בשמירת סיסמאות לענן, נשמר באופן מקומי.", "info");
+      triggerAlert("הסיסמאות עודכנו מקומית!", "info");
     } finally {
       setLoading(false);
       setShowPasswordsHelperModal(false);
@@ -1000,7 +1492,7 @@ ____________________                    _____________________                   
                       <div className="flex gap-1.5 justify-start lg:justify-end">
                         {/* Database URL Config Button */}
                         <button
-                          onClick={() => setShowDbConfigModal(true)}
+                          onClick={() => { setConnectionTestResult(null); setShowDbConfigModal(true); }}
                           className="text-[10px] bg-slate-50 text-slate-600 hover:bg-slate-100 font-medium px-2.5 py-1 rounded border border-slate-200 transition-all shadow-sm cursor-pointer"
                         >
                           <Cloud className="w-3 h-3 inline ml-1 text-slate-500" /> הגדרות חיבור ענן ☁️
@@ -1067,9 +1559,15 @@ ____________________                    _____________________                   
                   <Cloud className={`w-4 h-4 ${dbMode === "cloud" ? "text-emerald-600 animate-pulse" : "text-amber-600"}`} />
                   <span>
                     {dbMode === "cloud" ? (
-                      <span>
-                        המערכת מחוברת בהצלחה ל-<strong>PostgreSQL / Supabase</strong> ומסנכרנת כל פעולה בזמן אמת!
-                      </span>
+                      cloudConnectionStyle === "direct" ? (
+                        <span>
+                          המערכת מחוברת ב-<strong>חיבור ענן ישיר (Client-side Supabase API)</strong>. סנכרון מלא לפרויקט <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-[10px] font-mono text-emerald-800">{supabaseUrl.replace("https://", "")}</code> בזמן אמת! (פתרון מושלם ל-Vercel 🚀)
+                        </span>
+                      ) : (
+                        <span>
+                          המערכת מחוברת בהצלחה ל-<strong>PostgreSQL / Supabase</strong> דרך שרת Express ומסנכרנת כל פעולה בזמן אמת!
+                        </span>
+                      )
                     ) : (
                       <span>
                         המערכת עובדת כרגע ב-<strong>מצב מקומי (LocalStorage)</strong>. המידע נשמר על מחשב זה בלבד.
@@ -1084,7 +1582,11 @@ ____________________                    _____________________                   
                       : "bg-white text-amber-700 border-amber-100"
                   }`}
                 >
-                  {dbMode === "cloud" ? "מצב ענן פעיל ☁️" : "מצב מקומי 💻"}
+                  {dbMode === "cloud"
+                    ? cloudConnectionStyle === "direct"
+                      ? "חיבור ענן ישיר ☁️"
+                      : "מצב ענן פעיל ☁️"
+                    : "מצב מקומי 💻"}
                 </span>
               </div>
 
@@ -1999,15 +2501,16 @@ ____________________                    _____________________                   
             <h3 className="text-base font-semibold text-slate-800 text-center">
               הגדרת חיבור למסד נתונים בענן
             </h3>
-            <p className="text-xs text-slate-455 text-center mb-4 leading-relaxed font-normal">
-              הזיני כאן את מחרוזת החיבור (Connection String) של Supabase / PostgreSQL על מנת לסנכרן
-              את נתוני השכר והתקציב של הסמינר לענן בזמן אמת.
+            <p className="text-xs text-slate-500 text-center mb-4 leading-relaxed font-normal">
+              על מנת לסנכרן את נתוני השכר והתקציב של הסמינר לענן בזמן אמת, הזיני את פרטי Supabase שלהלן.
+              <br />
+              <span className="text-emerald-600 font-medium">המערכת תומכת בחיבור ישיר (מתאים ל-Vercel ולשרתים מבוזרים).</span>
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">
-                  מחרוזת חיבור PostgreSQL (DATABASE_URL):
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  מחרוזת חיבור PostgreSQL (DATABASE_URL עבור השרת האחורי):
                 </label>
                 <input
                   type="text"
@@ -2017,14 +2520,76 @@ ____________________                    _____________________                   
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
                 />
               </div>
+
+              <div className="border-t border-slate-100 pt-3">
+                <span className="text-[11px] font-bold text-indigo-600 block mb-2">💡 הגדרת סנכרון ישיר מהדפדפן (פתרון מומלץ):</span>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      כתובת פרויקט Supabase URL:
+                    </label>
+                    <input
+                      type="text"
+                      value={supabaseUrl}
+                      onChange={(e) => setSupabaseUrl(e.target.value)}
+                      placeholder="https://your-project-id.supabase.co"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      מפתח ציבורי Supabase Anon / Service Key:
+                    </label>
+                    <input
+                      type="text"
+                      value={supabaseKey}
+                      onChange={(e) => setSupabaseKey(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {connectionTestResult && (
+                <div className={`p-3 rounded-lg text-xs leading-relaxed ${
+                  connectionTestResult.type === "success" 
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-100 text-right" 
+                    : connectionTestResult.type === "warning"
+                      ? "bg-amber-50 text-amber-800 border border-amber-100 text-right"
+                      : "bg-rose-50 text-rose-800 border border-rose-100 text-right"
+                }`} dir="rtl">
+                  {connectionTestResult.message}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-60 font-semibold py-2 rounded-lg text-xs transition cursor-pointer border border-slate-200 h-9"
+                >
+                  {testingConnection ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin"></span>
+                      בודק חיבור מול Supabase...
+                    </>
+                  ) : (
+                    "🔍 בדיקת תקינות חיבור ענן"
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="flex gap-2 mt-5">
+            <div className="flex gap-2 mt-6">
               <button
                 onClick={handleSaveDbUrl}
                 className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
-                שמירת חיבור
+                שמירת חיבור ענן
               </button>
               <button
                 onClick={handleClearDbUrl}
