@@ -1620,7 +1620,7 @@ ____________________                    _____________________                   
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800" dir="rtl">
       {/* Top Gradient bar */}
-      <div className="h-2 bg-gradient-to-r from-indigo-700 via-indigo-600 to-violet-600 w-full" />
+      <div className="h-2 bg-gradient-to-r from-violet-700 via-violet-600 to-fuchsia-600 w-full" />
 
       {/* Main Container - AnimatePresence for transitions */}
       <AnimatePresence mode="wait">
@@ -1631,19 +1631,23 @@ ____________________                    _____________________                   
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="flex-grow flex flex-col justify-center items-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8"
+            className="flex-grow flex flex-col justify-center items-center bg-gradient-to-br from-violet-100 via-rose-50 to-slate-100 py-12 px-4 sm:px-6 lg:px-8"
           >
-            <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-sm border border-slate-200 text-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 left-0 h-1.5 bg-indigo-600" />
+            <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 text-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-violet-700 via-violet-600 to-fuchsia-600" />
 
               <div className="flex flex-col items-center">
-                <div className="w-12 h-12 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm shadow-indigo-100 mb-4">
-                  <GraduationCap className="w-7 h-7" />
+                <div className="w-24 h-24 rounded-full bg-white flex items-center justify-center mb-4 mt-2 ring-1 ring-slate-200 shadow-sm p-2">
+                  <img
+                    src="/logo.png"
+                    alt="סמל סמינר שצ'רנסקי בית שמש"
+                    className="w-full h-full object-contain"
+                  />
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 tracking-tight">
                   מערכת דיווח ובקרת שכר
                 </h2>
-                <p className="text-xs text-indigo-600 font-medium mt-1 bg-indigo-50/50 px-2.5 py-1 rounded-full border border-indigo-100/50">
+                <p className="text-xs text-violet-600 font-medium mt-1 bg-violet-50/50 px-2.5 py-1 rounded-full border border-violet-100/50">
                   סמינר שצ'רנסקי בית שמש • שנת תקציב תשפ"ז 🌾
                 </p>
               </div>
@@ -1659,7 +1663,7 @@ ____________________                    _____________________                   
                   className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all duration-150 group text-right cursor-pointer shadow-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
                       <Lock className="w-4 h-4" />
                     </div>
                     <div>
@@ -1680,7 +1684,7 @@ ____________________                    _____________________                   
                   className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all duration-150 group text-right cursor-pointer shadow-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
@@ -1701,7 +1705,7 @@ ____________________                    _____________________                   
                   className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all duration-150 group text-right cursor-pointer shadow-sm"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-violet-50 group-hover:text-violet-600 transition-colors">
                       <SignatureIcon className="w-4 h-4" />
                     </div>
                     <div>
@@ -1736,8 +1740,12 @@ ____________________                    _____________________                   
                 <div className="flex flex-col lg:flex-row justify-between items-center py-4 lg:h-20 gap-4">
                   {/* Seminar Logo & Identity */}
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm shadow-indigo-100">
-                      <GraduationCap className="w-6 h-6" />
+                    <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center ring-1 ring-slate-200 shadow-sm p-1">
+                      <img
+                        src="/logo.png"
+                        alt="סמל סמינר שצ'רנסקי בית שמש"
+                        className="w-full h-full object-contain"
+                      />
                     </div>
                     <div>
                       <h1 className="text-lg font-semibold text-slate-800 tracking-tight">
@@ -1827,9 +1835,9 @@ ____________________                    _____________________                   
                         {role === "director" && (
                           <button
                             onClick={() => setShowPasswordsHelperModal(true)}
-                            className="text-[10px] bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium px-2.5 py-1 rounded border border-indigo-100 transition-all shadow-sm cursor-pointer"
+                            className="text-[10px] bg-violet-50 text-violet-700 hover:bg-violet-100 font-medium px-2.5 py-1 rounded border border-violet-100 transition-all shadow-sm cursor-pointer"
                           >
-                            <Key className="w-3 h-3 inline ml-1 text-indigo-500" /> ניהול סיסמאות רכזות 🔑
+                            <Key className="w-3 h-3 inline ml-1 text-violet-500" /> ניהול סיסמאות רכזות 🔑
                           </button>
                         )}
                       </div>
@@ -1919,7 +1927,7 @@ ____________________                    _____________________                   
                       ₪{metrics.totalBudget.toLocaleString()}
                     </h3>
                     <div className="mt-2">
-                      <span className="text-indigo-700 font-semibold bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100/50">
+                      <span className="text-violet-700 font-semibold bg-violet-50 px-2 py-0.5 rounded text-[10px] border border-violet-100/50">
                         {role === "coordinator" ? `מסלול ${activeTrack}` : "כלל הסמינר"}
                       </span>
                     </div>
@@ -2013,7 +2021,7 @@ ____________________                    _____________________                   
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="חיפוש מורה, מקצוע, ת.ז..."
-                        className="w-full pr-8 pl-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all text-slate-700 h-9"
+                        className="w-full pr-8 pl-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 transition-all text-slate-700 h-9"
                       />
                     </div>
 
@@ -2023,7 +2031,7 @@ ____________________                    _____________________                   
                         value={filterTrack}
                         disabled={role === "coordinator"}
                         onChange={(e) => setFilterTrack(e.target.value)}
-                        className={`w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all font-semibold bg-white cursor-pointer text-slate-700 h-9 ${
+                        className={`w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 transition-all font-semibold bg-white cursor-pointer text-slate-700 h-9 ${
                           role === "coordinator" ? "opacity-50 pointer-events-none" : ""
                         }`}
                       >
@@ -2041,7 +2049,7 @@ ____________________                    _____________________                   
                       <select
                         value={filterJobType}
                         onChange={(e) => setFilterJobType(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all font-semibold bg-white cursor-pointer text-slate-700 h-9"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 transition-all font-semibold bg-white cursor-pointer text-slate-700 h-9"
                       >
                         <option value="all">כל צורות התשלום</option>
                         <option value="תקן">תקן (+45%)</option>
@@ -2056,7 +2064,7 @@ ____________________                    _____________________                   
                       <select
                         value={filterYear}
                         onChange={(e) => setFilterYear(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all text-slate-700 bg-white cursor-pointer font-semibold h-9"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 transition-all text-slate-700 bg-white cursor-pointer font-semibold h-9"
                       >
                         <option value="all">כל השנים</option>
                         <option value="יג">שנה יג</option>
@@ -2070,7 +2078,7 @@ ____________________                    _____________________                   
                       <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all text-slate-700 bg-white cursor-pointer h-9"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 transition-all text-slate-700 bg-white cursor-pointer h-9"
                       >
                         <option value="all">כל סטטוס הדיווח</option>
                         <option value="approved">מאושר לתשלום</option>
@@ -2085,7 +2093,7 @@ ____________________                    _____________________                   
                   <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                     <button
                       onClick={handleAddNewRow}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center h-9"
+                      className="bg-violet-600 hover:bg-violet-700 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center h-9"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>הוספת שורה</span>
@@ -2112,15 +2120,15 @@ ____________________                    _____________________                   
 
                 {/* Coordinator notice banner */}
                 {role === "coordinator" && activeTrack && (
-                  <div className="mt-4 p-3 bg-indigo-50 text-indigo-900 border border-indigo-200 rounded-xl text-sm flex justify-between items-center">
+                  <div className="mt-4 p-3 bg-violet-50 text-violet-900 border border-violet-200 rounded-xl text-sm flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                      <span className="inline-flex h-2 w-2 rounded-full bg-violet-600 animate-pulse" />
                       <span>
                         שלום <strong>רכזת התמחות {activeTrack}</strong>. המערכת מציגה ומאפשרת לך לדווח
                         רק עבור המקצועות והמורים השייכים להתמחות שלך.
                       </span>
                     </div>
-                    <div className="text-xs font-bold text-indigo-600 bg-white px-2.5 py-1 rounded-md border border-indigo-100 flex items-center gap-1.5">
+                    <div className="text-xs font-bold text-violet-600 bg-white px-2.5 py-1 rounded-md border border-violet-100 flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                       <span>הטבלה שלך נשמרת ישירות למסד הנתונים</span>
                     </div>
@@ -2179,7 +2187,7 @@ ____________________                    _____________________                   
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
                 <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-50/50 gap-2 no-print">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600" />
+                    <span className="w-2 h-2 rounded-full bg-violet-600" />
                     <h2 className="font-semibold text-slate-800 text-sm">
                       טבלת ריכוז תקציב ונתוני שכר - תשפ"ז
                     </h2>
@@ -2211,10 +2219,10 @@ ____________________                    _____________________                   
                           שעות שנתיות
                         </th>
                         <th className="p-3 text-center w-[5%] hidden lg:table-cell">תעריף לשעה</th>
-                        <th className="p-3 text-center w-[6%] bg-indigo-50/30 hidden xl:table-cell">
+                        <th className="p-3 text-center w-[6%] bg-violet-50/30 hidden xl:table-cell">
                           עלות מעביד לשעה
                         </th>
-                        <th className="p-3 text-center w-[7%] bg-indigo-50/50 text-indigo-900 font-extrabold">
+                        <th className="p-3 text-center w-[7%] bg-violet-50/50 text-violet-900 font-extrabold">
                           סה"כ שנתי
                         </th>
                         <th className="p-3 w-[6%] text-right hidden 2xl:table-cell">נסיעות</th>
@@ -2244,7 +2252,7 @@ ____________________                    _____________________                   
                           const multipleJobsBadge =
                             jobCount > 1 ? (
                               <span
-                                className="text-indigo-600 font-black text-sm mr-1 select-none"
+                                className="text-violet-600 font-black text-sm mr-1 select-none"
                                 title={`מורה זו מלמדת ${jobCount} משרות/מקצועות בסמינר`}
                               >
                                 *
@@ -2256,9 +2264,9 @@ ____________________                    _____________________                   
                               key={item.id}
                               className={`transition-colors ${
                                 activeEditingId === item.id
-                                  ? "bg-indigo-50/60 hover:bg-indigo-50/80 font-semibold"
+                                  ? "bg-violet-50/60 hover:bg-violet-50/80 font-semibold"
                                   : item.isContractReady
-                                  ? "bg-violet-50/45 hover:bg-violet-50/70"
+                                  ? "bg-fuchsia-50/45 hover:bg-fuchsia-50/70"
                                   : item.isApproved
                                   ? "bg-emerald-50/10 hover:bg-emerald-50/20"
                                   : "hover:bg-slate-50"
@@ -2298,7 +2306,7 @@ ____________________                    _____________________                   
                                         }}
                                         className={`font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer transition w-36 text-center flex items-center justify-center gap-1 ${
                                           item.isContractReady
-                                            ? "bg-violet-600 hover:bg-violet-700 text-white"
+                                            ? "bg-fuchsia-600 hover:bg-fuchsia-700 text-white"
                                             : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                                         }`}
                                       >
@@ -2357,7 +2365,7 @@ ____________________                    _____________________                   
                                 <span
                                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${
                                     item.paymentMethod === "תקן"
-                                      ? "bg-indigo-50 text-indigo-800 border border-indigo-100"
+                                      ? "bg-violet-50 text-violet-800 border border-violet-100"
                                       : item.paymentMethod === "שכר מרצים"
                                       ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
                                       : item.paymentMethod === "קבלה"
@@ -2390,10 +2398,10 @@ ____________________                    _____________________                   
                               <td className="p-3 border-b border-slate-100 text-center font-semibold align-middle hidden lg:table-cell">
                                 ₪{item.rate}
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-indigo-50/30 align-middle hidden xl:table-cell">
+                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-violet-50/30 align-middle hidden xl:table-cell">
                                 ₪{item.employerOverhead.toLocaleString()}
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-black text-violet-700 bg-violet-50/50 align-middle">
                                 ₪{item.totalAnnual.toLocaleString()}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
@@ -2416,7 +2424,7 @@ ____________________                    _____________________                   
                                   {item.isApproved && role === "coordinator" ? (
                                     <button
                                       onClick={() => openSimulatorModal(item)}
-                                      className="text-[10px] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
+                                      className="text-[10px] bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
                                       title="הגשת בקשת עדכון משרה"
                                     >
                                       <Calculator className="w-3 h-3" /> בקשי שינוי
@@ -2474,8 +2482,8 @@ ____________________                    _____________________                   
                     </div>
                     <div className="h-6 w-px bg-slate-200" />
                     <div className="text-sm">
-                      <span className="text-indigo-600 font-bold">סך תקציב שכר מחושב בטבלה:</span>
-                      <strong className="text-indigo-700 text-lg font-black mr-1">
+                      <span className="text-violet-600 font-bold">סך תקציב שכר מחושב בטבלה:</span>
+                      <strong className="text-violet-700 text-lg font-black mr-1">
                         ₪
                         {filteredRecords
                           .reduce((sum, r) => sum + r.totalAnnual, 0)
@@ -2491,7 +2499,7 @@ ____________________                    _____________________                   
                 {/* Cumulative track budget split charts */}
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
                   <div className="flex items-center gap-2 mb-4">
-                    <GraduationCap className="w-5 h-5 text-indigo-600" />
+                    <GraduationCap className="w-5 h-5 text-violet-600" />
                     <h3 className="font-semibold text-slate-800 text-sm">התפלגות תקציב לפי התמחויות</h3>
                   </div>
                   <p className="text-[11px] text-slate-400 mb-5 font-normal">
@@ -2510,13 +2518,13 @@ ____________________                    _____________________                   
                         <div key={track} className="space-y-1.5">
                           <div className="flex justify-between items-center text-xs font-semibold">
                             <span className="text-slate-600">{track}</span>
-                            <span className="text-indigo-950 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 font-bold text-[10px]">
+                            <span className="text-violet-950 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 font-bold text-[10px]">
                               ₪{amount.toLocaleString()} ({percentage}%)
                             </span>
                           </div>
                           <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
-                              className="h-full rounded-full bg-indigo-600 transition-all duration-500"
+                              className="h-full rounded-full bg-violet-600 transition-all duration-500"
                               style={{ width: `${percentage}%` }}
                             />
                           </div>
@@ -2542,12 +2550,12 @@ ____________________                    _____________________                   
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm lg:col-span-2 p-5">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
-                      <Info className="w-5 h-5 text-indigo-600" />
+                      <Info className="w-5 h-5 text-violet-600" />
                       <h3 className="font-semibold text-slate-800 text-sm">
                         מפת תקורות ונוסחאות שכר מותאמות
                       </h3>
                     </div>
-                    <span className="bg-indigo-50 border border-indigo-100 text-indigo-800 text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
+                    <span className="bg-violet-50 border border-violet-100 text-violet-800 text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
                       חישובים מבוקרי סמינר
                     </span>
                   </div>
@@ -2555,15 +2563,15 @@ ____________________                    _____________________                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Tenure Formula */}
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200/50">
-                      <h4 className="font-semibold text-xs text-indigo-900 mb-2 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-indigo-600" />
+                      <h4 className="font-semibold text-xs text-violet-900 mb-2 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-violet-600" />
                         משרת תקן (חודשי)
                       </h4>
                       <p className="text-[11px] text-slate-500 leading-relaxed mb-3 font-normal">
                         עלות המעביד כוללת תוספת של <strong>45%</strong>. שעות התלמידות מוכפלות ב-30
                         (משקף את השעות השנתיות), בעוד שכר המורה מחושב ישירות מתעריף השעה החודשית.
                       </p>
-                      <div className="bg-indigo-50/50 p-2.5 rounded border border-indigo-100/50 text-[10px] font-mono text-indigo-950 leading-relaxed">
+                      <div className="bg-violet-50/50 p-2.5 rounded border border-violet-100/50 text-[10px] font-mono text-violet-950 leading-relaxed">
                         שעות שנתיות לתלמידות = ש"ש × 30
                         <br />
                         עלות מעביד לשעה = תעריף לשעה × 1.45
@@ -2657,8 +2665,8 @@ ____________________                    _____________________                   
                       <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                         <th className="p-3">שם המורה</th>
                         <th className="p-3">שם המקצוע</th>
-                        <th className="p-3 text-center bg-indigo-50/50">שעות שהוקצו</th>
-                        <th className="p-3 text-center bg-indigo-50/50">תעריף</th>
+                        <th className="p-3 text-center bg-violet-50/50">שעות שהוקצו</th>
+                        <th className="p-3 text-center bg-violet-50/50">תעריף</th>
                         {MONTH_LABELS.map((label) => (
                           <th key={label} className="p-2 text-center w-12">{label}</th>
                         ))}
@@ -2686,8 +2694,8 @@ ____________________                    _____________________                   
                               <tr key={item.id} className={isOver ? "bg-rose-50/80" : remaining === 0 ? "bg-emerald-50/50" : "hover:bg-slate-50"}>
                                 <td className="p-3 font-bold">{item.teacherName}<span className="text-[10px] text-slate-400 block">{item.track}</span></td>
                                 <td className="p-3 text-slate-600 truncate max-w-[150px]">{item.subject}</td>
-                                <td className="p-3 text-center bg-indigo-50/30 font-black">{allocated} ש'</td>
-                                <td className="p-3 text-center bg-indigo-50/30 font-bold">₪{item.rate}</td>
+                                <td className="p-3 text-center bg-violet-50/30 font-black">{allocated} ש'</td>
+                                <td className="p-3 text-center bg-violet-50/30 font-bold">₪{item.rate}</td>
                                 {MONTH_KEYS.map((m) => (
                                   <td key={m} className="p-1 text-center">
                                     <input
@@ -2722,7 +2730,7 @@ ____________________                    _____________________                   
       {showPasswordModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center relative overflow-hidden">
-            <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-4 border border-indigo-100">
+            <div className="w-10 h-10 bg-violet-50 text-violet-600 rounded-lg flex items-center justify-center mx-auto mb-4 border border-violet-100">
               <Lock className="w-5 h-5" />
             </div>
             <h3 className="text-base font-semibold text-slate-800">כניסה מאובטחת</h3>
@@ -2739,7 +2747,7 @@ ____________________                    _____________________                   
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitPassword()}
-              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-center text-lg font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 mb-2 h-10"
+              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-center text-lg font-bold tracking-widest focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 mb-2 h-10"
             />
             {passwordError && (
               <p className="text-red-500 text-xs font-bold mb-4">{passwordError}</p>
@@ -2748,7 +2756,7 @@ ____________________                    _____________________                   
             <div className="flex gap-2">
               <button
                 onClick={submitPassword}
-                className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+                className="flex-grow bg-violet-600 hover:bg-violet-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
                 כניסה
               </button>
@@ -2822,12 +2830,12 @@ ____________________                    _____________________                   
                   value={customDbUrl}
                   onChange={(e) => setCustomDbUrl(e.target.value)}
                   placeholder="postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 font-mono h-9"
                 />
               </div>
 
               <div className="border-t border-slate-100 pt-3">
-                <span className="text-[11px] font-bold text-indigo-600 block mb-2">💡 הגדרת סנכרון ישיר מהדפדפן (פתרון מומלץ):</span>
+                <span className="text-[11px] font-bold text-violet-600 block mb-2">💡 הגדרת סנכרון ישיר מהדפדפן (פתרון מומלץ):</span>
                 
                 <div className="space-y-3">
                   <div>
@@ -2839,7 +2847,7 @@ ____________________                    _____________________                   
                       value={supabaseUrl}
                       onChange={(e) => setSupabaseUrl(e.target.value)}
                       placeholder="https://your-project-id.supabase.co"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 font-mono h-9"
                     />
                   </div>
 
@@ -2852,7 +2860,7 @@ ____________________                    _____________________                   
                       value={supabaseKey}
                       onChange={(e) => setSupabaseKey(e.target.value)}
                       placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 font-mono h-9"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 font-mono h-9"
                     />
                   </div>
                 </div>
@@ -2892,7 +2900,7 @@ ____________________                    _____________________                   
             <div className="flex gap-2 mt-6">
               <button
                 onClick={handleSaveDbUrl}
-                className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+                className="flex-grow bg-violet-600 hover:bg-violet-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
                 שמירת חיבור ענן
               </button>
@@ -2939,7 +2947,7 @@ ____________________                    _____________________                   
                       const updated = { ...passwords.coordinators, [track]: e.target.value };
                       setPasswords({ ...passwords, coordinators: updated });
                     }}
-                    className="border border-slate-200 rounded px-2 py-1 text-xs w-40 font-mono font-bold tracking-widest text-center focus:outline-none focus:border-indigo-500 bg-white"
+                    className="border border-slate-200 rounded px-2 py-1 text-xs w-40 font-mono font-bold tracking-widest text-center focus:outline-none focus:border-violet-500 bg-white"
                   />
                 </div>
               ))}
@@ -2948,7 +2956,7 @@ ____________________                    _____________________                   
             <div className="flex gap-2 mt-5">
               <button
                 onClick={handleSaveCoordinatorPasswords}
-                className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+                className="flex-grow bg-violet-600 hover:bg-violet-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
                 שמירת שינויים
               </button>
@@ -2969,10 +2977,10 @@ ____________________                    _____________________                   
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-4">
               <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                <FileSignature className="w-5 h-5 text-violet-600" />
+                <FileSignature className="w-5 h-5 text-fuchsia-600" />
                 <span>
                   הסכם העסקה מאוחד -{" "}
-                  <span className="text-violet-700 font-bold">
+                  <span className="text-fuchsia-700 font-bold">
                     {activeContractRecord.teacherName}
                   </span>
                 </span>
@@ -2992,7 +3000,7 @@ ____________________                    _____________________                   
             <div className="flex flex-wrap gap-2 mt-5">
               <button
                 onClick={handleCopyContract}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm"
+                className="bg-violet-600 hover:bg-violet-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm"
               >
                 <Copy className="w-4 h-4" /> העתקת חוזה
               </button>
@@ -3007,7 +3015,7 @@ ____________________                    _____________________                   
                 className={`text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm ${
                   activeContractRecord.isContractReady
                     ? "bg-rose-600 hover:bg-rose-700"
-                    : "bg-violet-600 hover:bg-violet-700"
+                    : "bg-fuchsia-600 hover:bg-fuchsia-700"
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -3047,7 +3055,7 @@ ____________________                    _____________________                   
                 </button>
                 <button
                   onClick={() => window.print()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-3.5 py-1.5 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5 transition h-9"
+                  className="bg-violet-600 hover:bg-violet-700 text-white font-medium text-xs px-3.5 py-1.5 rounded-lg shadow-sm cursor-pointer flex items-center gap-1.5 transition h-9"
                 >
                   <Printer className="w-4 h-4" /> הדפסת דוח
                 </button>
@@ -3077,10 +3085,10 @@ ____________________                    _____________________                   
                       שעות שנתיות
                     </th>
                     <th className="border border-slate-200 p-2 text-center">תעריף שעה</th>
-                    <th className="border border-slate-200 p-2 text-center bg-indigo-50/50 text-indigo-950">
+                    <th className="border border-slate-200 p-2 text-center bg-violet-50/50 text-violet-950">
                       עלות מעביד לשעה
                     </th>
-                    <th className="border border-slate-200 p-2 text-center bg-indigo-600 text-white font-semibold">
+                    <th className="border border-slate-200 p-2 text-center bg-violet-600 text-white font-semibold">
                       סה"כ שנתי שכר
                     </th>
                     <th className="border border-slate-200 p-2 text-center">סטטוס אישור</th>
@@ -3114,10 +3122,10 @@ ____________________                    _____________________                   
                         {item.totalHours}
                       </td>
                       <td className="border border-slate-200 p-2 text-center">₪{item.rate}</td>
-                      <td className="border border-slate-200 p-2 text-center bg-indigo-50/10 font-medium text-indigo-900">
+                      <td className="border border-slate-200 p-2 text-center bg-violet-50/10 font-medium text-violet-900">
                         ₪{item.employerOverhead.toLocaleString()}
                       </td>
-                      <td className="border border-slate-200 p-2 text-center bg-indigo-50 font-bold text-indigo-950">
+                      <td className="border border-slate-200 p-2 text-center bg-violet-50 font-bold text-violet-950">
                         ₪{item.totalAnnual.toLocaleString()}
                       </td>
                       <td
@@ -3132,7 +3140,7 @@ ____________________                    _____________________                   
                       <td
                         className={`border border-slate-200 p-2 text-center font-medium text-[10px] ${
                           item.isContractReady
-                            ? "text-violet-700 bg-violet-50/50"
+                            ? "text-fuchsia-700 bg-fuchsia-50/50"
                             : "text-slate-500 bg-slate-50/50"
                         }`}
                       >
@@ -3153,7 +3161,7 @@ ____________________                    _____________________                   
                     </td>
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
-                    <td className="border border-slate-200 p-3 text-center bg-indigo-100/50 text-indigo-950 font-bold text-sm">
+                    <td className="border border-slate-200 p-3 text-center bg-violet-100/50 text-violet-950 font-bold text-sm">
                       ₪{filteredRecords.reduce((sum, r) => sum + r.totalAnnual, 0).toLocaleString()}
                     </td>
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
@@ -3182,7 +3190,7 @@ ____________________                    _____________________                   
             {/* Header */}
             <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeEditingId < 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeEditingId < 0 ? 'bg-violet-50 text-violet-600' : 'bg-emerald-50 text-emerald-600'}`}>
                   {activeEditingId < 0 ? <Plus className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
                 </div>
                 <div>
@@ -3226,7 +3234,7 @@ ____________________                    _____________________                   
                       placeholder="לדוגמה: שרה כהן"
                       value={editTeacherName}
                       onChange={(e) => setEditTeacherName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white"
                     />
                   </div>
 
@@ -3237,7 +3245,7 @@ ____________________                    _____________________                   
                       placeholder="9 ספרות"
                       value={editTz}
                       onChange={(e) => setEditTz(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white text-center font-mono"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white text-center font-mono"
                     />
                   </div>
 
@@ -3248,7 +3256,7 @@ ____________________                    _____________________                   
                       placeholder="לדוגמה: 0501234567"
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white text-center font-mono"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white text-center font-mono"
                     />
                   </div>
 
@@ -3259,7 +3267,7 @@ ____________________                    _____________________                   
                       placeholder="name@domain.com"
                       value={editEmail}
                       onChange={(e) => setEditEmail(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-mono text-center"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-mono text-center"
                     />
                   </div>
                 </div>
@@ -3282,7 +3290,7 @@ ____________________                    _____________________                   
                       <select
                         value={editTrack}
                         onChange={(e) => setEditTrack(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-semibold"
                       >
                         {ALL_TRACKS.map((t) => (
                           <option key={t} value={t}>
@@ -3298,7 +3306,7 @@ ____________________                    _____________________                   
                     <select
                       value={editYear}
                       onChange={(e) => setEditYear(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white"
                     >
                       <option value="יג">שנה יג</option>
                       <option value="יד">שנה יד</option>
@@ -3313,7 +3321,7 @@ ____________________                    _____________________                   
                       placeholder="לדוגמה: פסיכולוגיה התפתחותית"
                       value={editSubject}
                       onChange={(e) => setEditSubject(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white"
                     />
                   </div>
 
@@ -3322,7 +3330,7 @@ ____________________                    _____________________                   
                     <select
                       value={editSemester}
                       onChange={(e) => setEditSemester(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white"
                     >
                       <option value="שנתי">שנתי</option>
                       <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
@@ -3346,7 +3354,7 @@ ____________________                    _____________________                   
                     <select
                       value={editPaymentMethod}
                       onChange={(e) => setEditPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-semibold"
                     >
                       <option value="תקן">תקן (+45% תקורות)</option>
                       <option value="שכר מרצים">שכר מרצים (+30% תקורות)</option>
@@ -3363,7 +3371,7 @@ ____________________                    _____________________                   
                       placeholder="0"
                       value={editShash || ""}
                       onChange={(e) => setEditShash(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-semibold"
                     />
                   </div>
 
@@ -3376,7 +3384,7 @@ ____________________                    _____________________                   
                       placeholder="0"
                       value={editMeetings || ""}
                       onChange={(e) => setEditMeetings(parseInt(e.target.value, 10) || 0)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-semibold"
                     />
                   </div>
 
@@ -3388,7 +3396,7 @@ ____________________                    _____________________                   
                       placeholder="0"
                       value={editRate || ""}
                       onChange={(e) => setEditRate(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-semibold"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-semibold"
                     />
                   </div>
 
@@ -3397,7 +3405,7 @@ ____________________                    _____________________                   
                     <select
                       value={editTravel}
                       onChange={(e) => setEditTravel(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-medium"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-medium"
                     >
                       <option value="בית שמש">בית שמש</option>
                       <option value="ירושלים">ירושלים</option>
@@ -3413,7 +3421,7 @@ ____________________                    _____________________                   
                     <select
                       value={editGradeTiming}
                       onChange={(e) => setEditGradeTiming(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-600 bg-white font-medium"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-violet-500/10 focus:border-violet-600 bg-white font-medium"
                     >
                       <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
                       <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
@@ -3424,16 +3432,16 @@ ____________________                    _____________________                   
               </div>
 
               {/* LIVE CALCULATIONS SUMMARY PANEL */}
-              <div className="bg-indigo-50 border border-indigo-150 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+              <div className="bg-violet-50 border border-violet-150 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
                 <div className="text-right">
-                  <div className="font-bold text-indigo-950 flex items-center gap-1 justify-start">
+                  <div className="font-bold text-violet-950 flex items-center gap-1 justify-start">
                     <span>סיכום חישוב שכר ותקורות חי ⚡</span>
                   </div>
-                  <p className="text-[10px] text-indigo-700/80 mt-0.5">
+                  <p className="text-[10px] text-violet-700/80 mt-0.5">
                     הנוסחאות מחושבות ומשוערכות אוטומטית בהתאם לצורת התשלום הנבחרת.
                   </p>
                 </div>
-                <div className="grid grid-cols-3 gap-6 text-center w-full sm:w-auto shrink-0 border-t sm:border-t-0 sm:border-r border-indigo-150 pt-3 sm:pt-0 sm:pr-4">
+                <div className="grid grid-cols-3 gap-6 text-center w-full sm:w-auto shrink-0 border-t sm:border-t-0 sm:border-r border-violet-150 pt-3 sm:pt-0 sm:pr-4">
                   <div>
                     <span className="text-[10px] text-slate-500 block">שעות שנתיות</span>
                     <strong className="text-sm font-black text-slate-800">
@@ -3447,8 +3455,8 @@ ____________________                    _____________________                   
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[10px] text-indigo-700 block">סה"כ שנתי שכר</span>
-                    <strong className="text-sm font-black text-indigo-900 bg-indigo-100/80 px-2 py-0.5 rounded border border-indigo-200/50">
+                    <span className="text-[10px] text-violet-700 block">סה"כ שנתי שכר</span>
+                    <strong className="text-sm font-black text-violet-900 bg-violet-100/80 px-2 py-0.5 rounded border border-violet-200/50">
                       ₪{computeCalculations(editShash, editMeetings, editRate, editPaymentMethod).totalAnnual.toLocaleString()}
                     </strong>
                   </div>
@@ -3466,7 +3474,7 @@ ____________________                    _____________________                   
               </button>
               <button
                 onClick={() => handleSaveRow(activeEditingId)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2 rounded-lg shadow-sm transition cursor-pointer"
+                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-5 py-2 rounded-lg shadow-sm transition cursor-pointer"
               >
                 {activeEditingId < 0 ? "הוספת משרה" : "שמירת שינויים"}
               </button>
@@ -3481,8 +3489,8 @@ ____________________                    _____________________                   
           <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-4">
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-indigo-600" />
-                סימולטור ובקשת עדכון משרה - <span className="text-indigo-600">{simulatingRow.teacherName}</span>
+                <Calculator className="w-5 h-5 text-violet-600" />
+                סימולטור ובקשת עדכון משרה - <span className="text-violet-600">{simulatingRow.teacherName}</span>
               </h3>
               <button onClick={closeSimulatorModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
             </div>
@@ -3498,29 +3506,29 @@ ____________________                    _____________________                   
                     <div className="pt-2 text-sm font-black border-t border-slate-200 mt-2">סה"כ שנתי: ₪{simulatingRow.totalAnnual.toLocaleString()}</div>
                   </div>
                 </div>
-                <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl">
-                  <span className="text-[11px] font-bold text-indigo-400 uppercase">מצב מוצע (סימולציה)</span>
-                  <div className="mt-2 text-xs space-y-1 font-semibold text-indigo-950">
+                <div className="bg-violet-50/50 border border-violet-100 p-4 rounded-2xl">
+                  <span className="text-[11px] font-bold text-violet-400 uppercase">מצב מוצע (סימולציה)</span>
+                  <div className="mt-2 text-xs space-y-1 font-semibold text-violet-950">
                     <div>מקצוע: {simSubject}</div>
                     <div>צורת תשלום: {simPaymentMethod}</div>
                     <div>שעות שנתיות: {simCalculations.totalHours}</div>
                     <div>תעריף: ₪{simRate}</div>
-                    <div className="pt-2 text-sm font-black border-t border-indigo-200 mt-2">סה"כ שנתי מוצע: ₪{simCalculations.totalAnnual.toLocaleString()}</div>
+                    <div className="pt-2 text-sm font-black border-t border-violet-200 mt-2">סה"כ שנתי מוצע: ₪{simCalculations.totalAnnual.toLocaleString()}</div>
                   </div>
                 </div>
               </div>
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המורה</label>
-                  <input type="text" value={simName} onChange={(e) => setSimName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={simName} onChange={(e) => setSimName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המקצוע</label>
-                  <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">סמסטר / מחזור</label>
-                  <select value={simSemester} onChange={(e) => setSimSemester(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                  <select value={simSemester} onChange={(e) => setSimSemester(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500">
                     <option value="שנתי">שנתי</option>
                     <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
                     <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
@@ -3530,7 +3538,7 @@ ____________________                    _____________________                   
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">צורת תשלום</label>
-                  <select value={simPaymentMethod} onChange={(e) => setSimPaymentMethod(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                  <select value={simPaymentMethod} onChange={(e) => setSimPaymentMethod(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500">
                     <option value="תקן">תקן (+45%)</option>
                     <option value="שכר מרצים">שכר מרצים (+30%)</option>
                     <option value="קבלה">קבלה (+18%)</option>
@@ -3539,19 +3547,19 @@ ____________________                    _____________________                   
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">ש"ש</label>
-                  <input type="text" value={simShash} onChange={(e) => setSimShash(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={simShash} onChange={(e) => setSimShash(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">מפגשים/חודשים</label>
-                  <input type="text" value={simMeetings} onChange={(e) => setSimMeetings(parseInt(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={simMeetings} onChange={(e) => setSimMeetings(parseInt(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">תעריף לשעה</label>
-                  <input type="text" value={simRate} onChange={(e) => setSimRate(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                  <input type="text" value={simRate} onChange={(e) => setSimRate(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">נסיעות</label>
-                  <select value={simTravel} onChange={(e) => setSimTravel(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                  <select value={simTravel} onChange={(e) => setSimTravel(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-violet-500">
                     <option value="בית שמש">בית שמש</option>
                     <option value="ירושלים">ירושלים</option>
                     <option value="ביתר">ביתר</option>
@@ -3579,7 +3587,7 @@ ____________________                    _____________________                   
               )}
             </div>
             <div className="flex gap-2 mt-5 pt-3 border-t">
-              <button onClick={submitChangeRequest} className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm transition cursor-pointer flex items-center justify-center gap-1">
+              <button onClick={submitChangeRequest} className="flex-grow bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl text-sm transition cursor-pointer flex items-center justify-center gap-1">
                 <Send className="w-4 h-4" /> שלחי בקשת שינוי למזכירה 📤
               </button>
               <button onClick={closeSimulatorModal} className="flex-grow bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-sm transition cursor-pointer">ביטול</button>
@@ -3609,7 +3617,7 @@ ____________________                    _____________________                   
                     <div key={req.requestId} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-2 border-b gap-2">
                         <div>
-                          <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-full">רכזת מסלול: {req.track}</span>
+                          <span className="text-xs font-bold bg-violet-100 text-violet-800 px-2.5 py-1 rounded-full">רכזת מסלול: {req.track}</span>
                           <span className="text-[11px] text-slate-400 mr-2">הוגש ב: {req.timestamp}</span>
                         </div>
                         <span className={`text-xs font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
@@ -3623,11 +3631,11 @@ ____________________                    _____________________                   
                           <p>מקצוע: {req.current.subject}</p>
                           <p>עלות שנתית: <strong>₪{req.current.totalAnnual.toLocaleString()}</strong></p>
                         </div>
-                        <div className="bg-indigo-50/20 p-3 rounded-xl border border-indigo-100/50">
-                          <span className="font-bold text-indigo-500 block mb-1">שינוי מוצע מבוקש</span>
+                        <div className="bg-violet-50/20 p-3 rounded-xl border border-violet-100/50">
+                          <span className="font-bold text-violet-500 block mb-1">שינוי מוצע מבוקש</span>
                           <p>מורה: <strong>{req.proposed.teacherName}</strong></p>
                           <p>מקצוע: {req.proposed.subject} ({req.proposed.semester})</p>
-                          <p>עלות מוצעת: <strong className="text-indigo-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
+                          <p>עלות מוצעת: <strong className="text-violet-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
                         </div>
                       </div>
                       <div className="flex justify-end gap-2 pt-2 border-t">
@@ -3656,7 +3664,7 @@ ____________________                    _____________________                   
                   ? "bg-emerald-50 text-emerald-600 border-emerald-100"
                   : alertConfig.type === "error"
                   ? "bg-rose-50 text-rose-600 border-rose-100"
-                  : "bg-indigo-50 text-indigo-600 border-indigo-100"
+                  : "bg-violet-50 text-violet-600 border-violet-100"
               }`}
             >
               {alertConfig.type === "success" ? (
@@ -3673,7 +3681,7 @@ ____________________                    _____________________                   
             </p>
             <button
               onClick={() => setAlertConfig(null)}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm h-9"
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-2 rounded-lg text-xs transition cursor-pointer shadow-sm h-9"
             >
               הבנתי, תודה
             </button>
