@@ -1631,9 +1631,38 @@ ____________________                    _____________________                   
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="flex-grow flex flex-col justify-center items-center bg-gradient-to-br from-violet-100 via-rose-50 to-slate-100 py-12 px-4 sm:px-6 lg:px-8"
+            className="relative overflow-hidden flex-grow flex flex-col justify-center items-center bg-gradient-to-br from-violet-100 via-rose-50 to-slate-100 py-12 px-4 sm:px-6 lg:px-8"
           >
-            <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 text-center relative overflow-hidden">
+            {/* Floating decorative shapes drifting across the login screen (purely visual) */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+              {[
+                { size: 180, from: "from-violet-300/40", to: "to-fuchsia-300/30", top: "8%", left: "-6%", dx: 90, dy: 60, dur: 18, delay: 0, round: "rounded-full" },
+                { size: 130, from: "from-rose-300/40", to: "to-violet-200/30", top: "62%", left: "80%", dx: -80, dy: -50, dur: 22, delay: 1.5, round: "rounded-full" },
+                { size: 100, from: "from-fuchsia-300/40", to: "to-rose-200/30", top: "78%", left: "10%", dx: 70, dy: -40, dur: 20, delay: 0.8, round: "rounded-[38%]" },
+                { size: 150, from: "from-violet-200/40", to: "to-sky-200/30", top: "18%", left: "72%", dx: -60, dy: 70, dur: 24, delay: 2.2, round: "rounded-[42%]" },
+                { size: 80, from: "from-fuchsia-200/50", to: "to-violet-300/30", top: "42%", left: "40%", dx: 50, dy: -60, dur: 16, delay: 1.1, round: "rounded-full" }
+              ].map((s, i) => (
+                <motion.div
+                  key={i}
+                  className={`absolute bg-gradient-to-br ${s.from} ${s.to} ${s.round} blur-2xl`}
+                  style={{ width: s.size, height: s.size, top: s.top, left: s.left }}
+                  animate={{
+                    x: [0, s.dx, 0],
+                    y: [0, s.dy, 0],
+                    scale: [1, 1.15, 1],
+                    rotate: [0, 25, 0]
+                  }}
+                  transition={{
+                    duration: s.dur,
+                    delay: s.delay,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                />
+              ))}
+            </div>
+
+            <div className="relative z-10 max-w-md w-full space-y-8 bg-white/95 backdrop-blur-sm p-8 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 text-center overflow-hidden">
               <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-violet-700 via-violet-600 to-fuchsia-600" />
 
               <div className="flex flex-col items-center">
