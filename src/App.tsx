@@ -4,6 +4,7 @@ import {
   GraduationCap,
   Key,
   Cloud,
+  Database,
   FileSignature,
   FileText,
   CheckCircle2,
@@ -89,6 +90,8 @@ export default function App() {
   const [editTz, setEditTz] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editTravel, setEditTravel] = useState("בית שמש");
+  const [editGradeTiming, setEditGradeTiming] = useState("ציון אחד בסוף שנה");
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,7 +133,10 @@ export default function App() {
       phone: item.phone,
       email: item.email,
       is_approved: item.isApproved,
-      is_contract_ready: item.isContractReady
+      is_contract_ready: item.isContractReady,
+      travel: item.travel || "בית שמש",
+      grade_timing: item.gradeTiming || "ציון אחד בסוף שנה",
+      monthly_hours: item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
     };
   };
 
@@ -153,7 +159,10 @@ export default function App() {
       phone: dbItem.phone || "",
       email: dbItem.email || "",
       isApproved: Boolean(dbItem.is_approved),
-      isContractReady: Boolean(dbItem.is_contract_ready)
+      isContractReady: Boolean(dbItem.is_contract_ready),
+      travel: dbItem.travel || "בית שמש",
+      gradeTiming: dbItem.grade_timing || "ציון אחד בסוף שנה",
+      monthlyHours: dbItem.monthly_hours ? JSON.parse(dbItem.monthly_hours) : {}
     };
   };
 
@@ -613,7 +622,10 @@ export default function App() {
       phone: "",
       email: "",
       isApproved: false,
-      isContractReady: false
+      isContractReady: false,
+      travel: "בית שמש",
+      gradeTiming: "ציון אחד בסוף שנה",
+      monthlyHours: {}
     };
 
     setRecords([newRow, ...records]);
@@ -634,6 +646,8 @@ export default function App() {
     setEditTz(row.tz);
     setEditPhone(row.phone);
     setEditEmail(row.email);
+    setEditTravel(row.travel || "בית שמש");
+    setEditGradeTiming(row.gradeTiming || "ציון אחד בסוף שנה");
   };
 
   const handleCancelEdit = (id: number) => {
@@ -683,7 +697,10 @@ export default function App() {
       phone: editPhone.trim(),
       email: editEmail.trim(),
       isApproved: matchRow ? matchRow.isApproved : false,
-      isContractReady: matchRow ? matchRow.isContractReady : false
+      isContractReady: matchRow ? matchRow.isContractReady : false,
+      travel: editTravel,
+      gradeTiming: editGradeTiming,
+      monthlyHours: matchRow ? matchRow.monthlyHours : {}
     };
 
     setLoading(true);
@@ -1495,7 +1512,7 @@ ____________________                    _____________________                   
                           onClick={() => { setConnectionTestResult(null); setShowDbConfigModal(true); }}
                           className="text-[10px] bg-slate-50 text-slate-600 hover:bg-slate-100 font-medium px-2.5 py-1 rounded border border-slate-200 transition-all shadow-sm cursor-pointer"
                         >
-                          <Cloud className="w-3 h-3 inline ml-1 text-slate-500" /> הגדרות חיבור ענן ☁️
+                          <Database className="w-3 h-3 inline ml-1 text-slate-500" /> הגדרות מסד נתונים 🗄️
                         </button>
 
                         {/* Password helper for Director only */}
@@ -1556,18 +1573,12 @@ ____________________                    _____________________                   
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Cloud className={`w-4 h-4 ${dbMode === "cloud" ? "text-emerald-600 animate-pulse" : "text-amber-600"}`} />
+                  <Database className={`w-4 h-4 ${dbMode === "cloud" ? "text-emerald-600" : "text-amber-600"}`} />
                   <span>
                     {dbMode === "cloud" ? (
-                      cloudConnectionStyle === "direct" ? (
-                        <span>
-                          המערכת מחוברת ב-<strong>חיבור ענן ישיר (Client-side Supabase API)</strong>. סנכרון מלא לפרויקט <code className="bg-emerald-100/60 px-1 py-0.5 rounded text-[10px] font-mono text-emerald-800">{supabaseUrl.replace("https://", "")}</code> בזמן אמת! (פתרון מושלם ל-Vercel 🚀)
-                        </span>
-                      ) : (
-                        <span>
-                          המערכת מחוברת בהצלחה ל-<strong>PostgreSQL / Supabase</strong> דרך שרת Express ומסנכרנת כל פעולה בזמן אמת!
-                        </span>
-                      )
+                      <span>
+                        המערכת מחוברת בהצלחה ל-<strong>מסד הנתונים (DATABASE)</strong> ומסנכרנת כל פעולה בזמן אמת!
+                      </span>
                     ) : (
                       <span>
                         המערכת עובדת כרגע ב-<strong>מצב מקומי (LocalStorage)</strong>. המידע נשמר על מחשב זה בלבד.
@@ -1582,11 +1593,7 @@ ____________________                    _____________________                   
                       : "bg-white text-amber-700 border-amber-100"
                   }`}
                 >
-                  {dbMode === "cloud"
-                    ? cloudConnectionStyle === "direct"
-                      ? "חיבור ענן ישיר ☁️"
-                      : "מצב ענן פעיל ☁️"
-                    : "מצב מקומי 💻"}
+                  {dbMode === "cloud" ? "מחובר ל-DB" : "שמירה מקומית בלבד"}
                 </span>
               </div>
 
@@ -1805,11 +1812,13 @@ ____________________                    _____________________                   
                     </div>
                     <div className="text-xs font-bold text-indigo-600 bg-white px-2.5 py-1 rounded-md border border-indigo-100 flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      <span>הטבלה שלך נשמרת ישירות לענן</span>
+                      <span>הטבלה שלך נשמרת ישירות למסד הנתונים</span>
                     </div>
                   </div>
                 )}
               </div>
+
+
 
               {/* Main Spreadsheet container */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
@@ -2082,6 +2091,33 @@ ____________________                    _____________________                   
                                   <td className="p-3 border-b border-slate-100 text-center font-extrabold text-indigo-900 bg-indigo-50/20 align-middle">
                                     ₪{activeCalculatedVals.totalAnnual.toLocaleString()}
                                   </td>
+                                  {/* TRAVEL EDIT */}
+                                  <td className="p-2 border-b border-slate-100 align-middle w-40">
+                                    <select
+                                      value={editTravel}
+                                      onChange={(e) => setEditTravel(e.target.value)}
+                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none bg-white font-medium"
+                                    >
+                                      <option value="בית שמש">בית שמש</option>
+                                      <option value="ירושלים">ירושלים</option>
+                                      <option value="בני ברק">בני ברק</option>
+                                      <option value="אלעד">אלעד</option>
+                                      <option value="מודיעין עילית">מודיעין עילית</option>
+                                      <option value="אחר / ללא">אחר / ללא</option>
+                                    </select>
+                                  </td>
+                                  {/* GRADE TIMING EDIT */}
+                                  <td className="p-2 border-b border-slate-100 align-middle w-48">
+                                    <select
+                                      value={editGradeTiming}
+                                      onChange={(e) => setEditGradeTiming(e.target.value)}
+                                      className="w-full text-xs border border-slate-200 rounded p-1.5 focus:outline-none bg-white font-medium"
+                                    >
+                                      <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
+                                      <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
+                                      <option value="ללא ציון (סדנה/ערב)">ללא ציון (סדנה/ערב)</option>
+                                    </select>
+                                  </td>
                                   {/* TZ */}
                                   <td className="p-2 border-b border-slate-100 align-middle">
                                     <input
@@ -2187,6 +2223,14 @@ ____________________                    _____________________                   
                                   </td>
                                   <td className="p-3.5 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
                                     ₪{item.totalAnnual.toLocaleString()}
+                                  </td>
+                                  {/* TRAVEL DISPLAY */}
+                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                                    {item.travel || "בית שמש"}
+                                  </td>
+                                  {/* GRADE TIMING DISPLAY */}
+                                  <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                                    {item.gradeTiming || "ציון אחד בסוף שנה"}
                                   </td>
                                   <td className="p-3.5 border-b border-slate-100 text-center font-mono align-middle">
                                     {item.tz || "—"}

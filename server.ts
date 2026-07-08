@@ -145,6 +145,11 @@ async function bootstrapDatabase() {
           );
         `);
 
+        // Dynamically add missing columns for travel, grade timing and monthly execution hours
+        await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS travel TEXT;");
+        await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS grade_timing TEXT;");
+        await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS monthly_hours TEXT;");
+
         await client.query(`
           CREATE TABLE IF NOT EXISTS system_config (
             key TEXT PRIMARY KEY,
@@ -261,7 +266,10 @@ async function getRecords() {
         phone: row.phone,
         email: row.email,
         isApproved: row.is_approved,
-        isContractReady: row.is_contract_ready
+        isContractReady: row.is_contract_ready,
+        travel: row.travel || "בית שמש",
+        gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
+        monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
       }));
     } catch (err) {
       console.error("Error fetching from direct Postgres:", err);
@@ -295,7 +303,10 @@ async function getRecords() {
         phone: row.phone,
         email: row.email,
         isApproved: row.is_approved,
-        isContractReady: row.is_contract_ready
+        isContractReady: row.is_contract_ready,
+        travel: row.travel || "בית שמש",
+        gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
+        monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
       }));
     } catch (err) {
       console.error("Error fetching from Supabase REST:", err);
@@ -335,7 +346,10 @@ async function saveRecord(item: any) {
     phone: item.phone,
     email: item.email,
     is_approved: item.isApproved,
-    is_contract_ready: item.isContractReady
+    is_contract_ready: item.isContractReady,
+    travel: item.travel || "בית שמש",
+    grade_timing: item.gradeTiming || "ציון אחד בסוף שנה",
+    monthly_hours: item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
   };
 
   // Mode 1: Direct Postgres Pool
@@ -348,13 +362,16 @@ async function saveRecord(item: any) {
           `UPDATE salary_records 
            SET track = $1, year = $2, teacher_name = $3, subject = $4, semester = $5, payment_method = $6, 
                shash = $7, meetings = $8, total_hours = $9, rate = $10, employer_overhead = $11, total_annual = $12, 
-               tz = $13, phone = $14, email = $15, is_approved = $16, is_contract_ready = $17
-           WHERE id = $18
+               tz = $13, phone = $14, email = $15, is_approved = $16, is_contract_ready = $17,
+               travel = $18, grade_timing = $19, monthly_hours = $20
+           WHERE id = $21
            RETURNING *`,
           [
             item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
-            item.tz, item.phone, item.email, item.isApproved, item.isContractReady, item.id
+            item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
+            item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}",
+            item.id
           ]
         );
         if (res.rows.length > 0) {
@@ -364,13 +381,14 @@ async function saveRecord(item: any) {
         // Create new record
         const res = await pool.query(
           `INSERT INTO salary_records 
-           (track, year, teacher_name, subject, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           (track, year, teacher_name, subject, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready, travel, grade_timing, monthly_hours)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
            RETURNING id`,
           [
             item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
-            item.tz, item.phone, item.email, item.isApproved, item.isContractReady
+            item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
+            item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
           ]
         );
         return { ...item, id: res.rows[0].id };

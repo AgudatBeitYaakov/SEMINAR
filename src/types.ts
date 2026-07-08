@@ -22,6 +22,9 @@ export interface SalaryRecord {
   email: string;
   isApproved: boolean;
   isContractReady: boolean;
+  travel?: string;
+  gradeTiming?: string;
+  monthlyHours?: Record<string, number>;
 }
 
 export type UserRole = 'guest' | 'director' | 'secretary' | 'coordinator';
