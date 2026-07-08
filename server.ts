@@ -16,19 +16,19 @@ app.use(express.json());
 const DATA_DIR = path.join(process.cwd(), "data");
 const LOCAL_DB_PATH = path.join(DATA_DIR, "records.json");
 const LOCAL_PASSWORDS_PATH = path.join(DATA_DIR, "passwords.json");
+const LOCAL_CHANGE_REQUESTS_PATH = path.join(DATA_DIR, "change_requests.json");
 
 const INITIAL_PASSWORDS = {
-  director: "111",
-  secretary: "222",
+  director: "צפורה",
+  secretary: "שרייבר",
   coordinators: {
-    "ייעוץ חינוכי": "301",
-    "הוראה מותאמת": "302",
-    "הוראת אנגלית": "303",
-    "הוראת מתמטיקה": "304",
-    "חינוך מיוחד": "305",
-    "הדרכת טיולים": "306",
-    "גרפיקה ומולטימדיה": "307",
-    "חשבונאות ומיסים": "308"
+    "קודש": "קודש",
+    "חובה": "חובה",
+    "חנ\"מ והו\"מ": "חנ\"מ",
+    "גננות": "גננות",
+    "אדריכלות": "אדריכלות",
+    "גרפיקה": "גרפיקה",
+    "מיסים וחשבונאות": "מיסים"
   } as Record<string, string>
 };
 
@@ -39,6 +39,10 @@ if (!fs.existsSync(DATA_DIR)) {
 
 if (!fs.existsSync(LOCAL_PASSWORDS_PATH)) {
   fs.writeFileSync(LOCAL_PASSWORDS_PATH, JSON.stringify(INITIAL_PASSWORDS, null, 2), "utf-8");
+}
+
+if (!fs.existsSync(LOCAL_CHANGE_REQUESTS_PATH)) {
+  fs.writeFileSync(LOCAL_CHANGE_REQUESTS_PATH, JSON.stringify([], null, 2), "utf-8");
 }
 
 // Initial mock dataset representing the seminary's rich records
@@ -154,6 +158,16 @@ async function bootstrapDatabase() {
           CREATE TABLE IF NOT EXISTS system_config (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+          );
+        `);
+
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS change_requests (
+            id BIGINT PRIMARY KEY,
+            row_id INTEGER NOT NULL,
+            track TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
           );
         `);
 
@@ -480,6 +494,134 @@ async function deleteRecord(id: number) {
   return true;
 }
 
+// --- Change Requests Helpers ---
+function parseChangeRequestPayload(payload: string) {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function mapChangeRequestRow(row: any) {
+  const parsed = parseChangeRequestPayload(row.payload);
+  if (!parsed) return null;
+  return {
+    requestId: Number(row.id),
+    rowId: row.row_id,
+    track: row.track,
+    ...parsed,
+  };
+}
+
+async function getChangeRequests() {
+  await checkDbModeOnRequest();
+
+  const pool = getDbPool();
+  if (pool && isDbHealthy && dbMode === "cloud") {
+    try {
+      const res = await pool.query("SELECT * FROM change_requests ORDER BY created_at DESC");
+      return res.rows.map(mapChangeRequestRow).filter(Boolean);
+    } catch (err) {
+      console.error("Error fetching change requests from Postgres:", err);
+    }
+  }
+
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      const res = await supabaseFetch("/change_requests?select=*&order=created_at.desc");
+      const rows = await res.json();
+      return rows.map(mapChangeRequestRow).filter(Boolean);
+    } catch (err) {
+      console.error("Error fetching change requests from Supabase REST:", err);
+    }
+  }
+
+  try {
+    const data = fs.readFileSync(LOCAL_CHANGE_REQUESTS_PATH, "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+async function saveChangeRequest(request: any) {
+  await checkDbModeOnRequest();
+
+  const requestId = request.requestId || Date.now();
+  const payload = JSON.stringify({
+    current: request.current,
+    proposed: request.proposed,
+    timestamp: request.timestamp || new Date().toLocaleString("he-IL"),
+  });
+
+  const pool = getDbPool();
+  if (pool && isDbHealthy && dbMode === "cloud") {
+    try {
+      await pool.query(
+        `INSERT INTO change_requests (id, row_id, track, payload)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET row_id = EXCLUDED.row_id, track = EXCLUDED.track, payload = EXCLUDED.payload`,
+        [requestId, request.rowId, request.track, payload]
+      );
+      return { ...request, requestId };
+    } catch (err) {
+      console.error("Error saving change request to Postgres:", err);
+    }
+  }
+
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      await supabaseFetch("/change_requests", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({
+          id: requestId,
+          row_id: request.rowId,
+          track: request.track,
+          payload,
+        }),
+      });
+      return { ...request, requestId };
+    } catch (err) {
+      console.error("Error saving change request to Supabase REST:", err);
+    }
+  }
+
+  const localRequests = await getChangeRequests();
+  const updated = [...localRequests.filter((r: any) => r.requestId !== requestId), { ...request, requestId }];
+  fs.writeFileSync(LOCAL_CHANGE_REQUESTS_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  return { ...request, requestId };
+}
+
+async function deleteChangeRequest(id: number) {
+  await checkDbModeOnRequest();
+
+  const pool = getDbPool();
+  if (pool && isDbHealthy && dbMode === "cloud") {
+    try {
+      await pool.query("DELETE FROM change_requests WHERE id = $1", [id]);
+      return true;
+    } catch (err) {
+      console.error("Error deleting change request from Postgres:", err);
+    }
+  }
+
+  if (hasSupabaseRest && dbMode === "cloud") {
+    try {
+      await supabaseFetch(`/change_requests?id=eq.${id}`, { method: "DELETE" });
+      return true;
+    } catch (err) {
+      console.error("Error deleting change request from Supabase REST:", err);
+    }
+  }
+
+  const localRequests = await getChangeRequests();
+  const updated = localRequests.filter((r: any) => r.requestId !== id);
+  fs.writeFileSync(LOCAL_CHANGE_REQUESTS_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  return true;
+}
+
 // API REST Endpoints
 app.get("/api/records", async (req, res) => {
   try {
@@ -507,6 +649,34 @@ app.delete("/api/records/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     await deleteRecord(id);
+    res.json({ success: true, dbMode });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/change-requests", async (req, res) => {
+  try {
+    const requests = await getChangeRequests();
+    res.json({ success: true, dbMode, requests });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/change-requests", async (req, res) => {
+  try {
+    const saved = await saveChangeRequest(req.body);
+    res.json({ success: true, dbMode, request: saved });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/change-requests/:id", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await deleteChangeRequest(id);
     res.json({ success: true, dbMode });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

@@ -1,20 +1,48 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# מערכת דיווח ובקרת שכר ותקציב - סמינר שצ'רנסקי בית שמש
 
-# Run and deploy your AI Studio app
+מערכת לניהול דיווחי שכר, תקציב, חוזים ובקשות שינוי לשנת תקציב תשפ"ז.
 
-This contains everything you need to run your app locally.
+## הרצה מקומית
 
-View your app in AI Studio: https://ai.studio/apps/5550e521-5fa9-4cfc-af7e-c6c9c2408aec
+**דרישות:** Node.js 18+
 
-## Run Locally
+```bash
+npm install
+npm run dev
+```
 
-**Prerequisites:**  Node.js
+המערכת תיפתח בכתובת: http://localhost:3000
 
+## חיבור ל-Supabase
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. צרי פרויקט ב-[Supabase](https://supabase.com)
+2. הריצי את סקריפט ה-SQL מ-[AGENTS.md](AGENTS.md) ב-SQL Editor
+3. צרי קובץ `.env` בשורש הפרויקט:
+
+```env
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT.supabase.co:5432/postgres
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+ניתן גם להגדיר חיבור ישיר דרך ממשק המערכת (כפתור "הגדרות מסד נתונים").
+
+## תפקידים במערכת
+
+| תפקיד | הרשאות |
+|--------|---------|
+| **מנהלת סמינר** | אישור שכר, ניהול סיסמאות, צפייה בכל המסלולים |
+| **מזכירה** | הוספה/עריכה/מחיקה, הפקת חוזים, דיווח שעות חודשי, אישור בקשות שינוי |
+| **רכזת מסלול** | דיווח ועריכה במסלול שלה בלבד, הגשת בקשות שינוי |
+
+## סיסמאות ברירת מחדל
+
+- מנהלת: `צפורה`
+- מזכירה: `שרייבר`
+- רכזות: שם המסלול (למשל `קודש`, `חובה`)
+
+## בנייה לפרודקשן
+
+```bash
+npm run build
+```

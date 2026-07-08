@@ -26,9 +26,12 @@ import {
   Calculator,
   UserCheck,
   UserX,
-  FileSignature as SignatureIcon
+  FileSignature as SignatureIcon,
+  Inbox,
+  ChartLine,
+  Send
 } from "lucide-react";
-import { SalaryRecord, UserRole } from "./types";
+import { SalaryRecord, UserRole, ChangeRequest } from "./types";
 
 const ALL_TRACKS = [
   "קודש",
@@ -53,6 +56,19 @@ const INITIAL_PASSWORDS = {
     "מיסים וחשבונאות": "מיסים"
   } as Record<string, string>
 };
+
+const TRACKS_BUDGET_LIMITS: Record<string, number> = {
+  "קודש": 150000,
+  "חובה": 120000,
+  "חנ\"מ והו\"מ": 180000,
+  "גננות": 80000,
+  "אדריכלות": 100000,
+  "גרפיקה": 90000,
+  "מיסים וחשבונאות": 110000
+};
+
+const MONTH_KEYS = ["sep", "oct", "nov", "dec", "jan", "feb", "mar", "apr", "may", "jun", "jul"] as const;
+const MONTH_LABELS = ["ספט'", "אוק'", "נוב'", "דצמ'", "ינו'", "פבר'", "מרץ", "אפר'", "מאי", "יוני", "יולי"];
 
 export default function App() {
   // Authentication & Role State
@@ -109,6 +125,21 @@ export default function App() {
   const [showContractModal, setShowContractModal] = useState(false);
   const [activeContractRecord, setActiveContractRecord] = useState<SalaryRecord | null>(null);
   const [showFinalReportModal, setShowFinalReportModal] = useState(false);
+
+  // Change requests & execution view state
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [showSimulatorModal, setShowSimulatorModal] = useState(false);
+  const [simulatingRow, setSimulatingRow] = useState<SalaryRecord | null>(null);
+  const [simName, setSimName] = useState("");
+  const [simSubject, setSimSubject] = useState("");
+  const [simSemester, setSimSemester] = useState("שנתי");
+  const [simPaymentMethod, setSimPaymentMethod] = useState("שכר מרצים");
+  const [simShash, setSimShash] = useState(0);
+  const [simMeetings, setSimMeetings] = useState(0);
+  const [simRate, setSimRate] = useState(0);
+  const [simTravel, setSimTravel] = useState("בית שמש");
+  const [showRequestsQueueModal, setShowRequestsQueueModal] = useState(false);
+  const [isExecutionViewActive, setIsExecutionViewActive] = useState(false);
 
   // Custom alert & confirm states
   const [alertConfig, setAlertConfig] = useState<{ show: boolean; text: string; type: "success" | "error" | "info"; title: string } | null>(null);
@@ -190,6 +221,7 @@ export default function App() {
 
     fetchPasswords();
     fetchRecords();
+    fetchChangeRequests();
   }, []);
 
   const fetchPasswords = async () => {
@@ -300,6 +332,191 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  const fetchChangeRequests = async () => {
+    try {
+      const response = await fetch("/api/change-requests");
+      if (!response.ok) throw new Error("Express backend not available");
+      const data = await response.json();
+      if (data.success && Array.isArray(data.requests)) {
+        setChangeRequests(data.requests);
+        localStorage.setItem("sz_change_requests_queue", JSON.stringify(data.requests));
+        return;
+      }
+      throw new Error("Invalid response");
+    } catch (err) {
+      console.warn("API error fetching change requests, trying localStorage:", err);
+      const saved = localStorage.getItem("sz_change_requests_queue");
+      if (saved) {
+        try {
+          setChangeRequests(JSON.parse(saved));
+        } catch (e) {}
+      }
+    }
+  };
+
+  const persistChangeRequest = async (request: ChangeRequest) => {
+    try {
+      const response = await fetch("/api/change-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const updated = [...changeRequests.filter((r) => r.requestId !== request.requestId), data.request || request];
+          setChangeRequests(updated);
+          localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
+          return data.request as ChangeRequest;
+        }
+      }
+    } catch (err) {
+      console.warn("Express save change request failed:", err);
+    }
+
+    const updated = [...changeRequests.filter((r) => r.requestId !== request.requestId), request];
+    localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
+    setChangeRequests(updated);
+    return request;
+  };
+
+  const removeChangeRequest = async (requestId: number) => {
+    try {
+      const response = await fetch(`/api/change-requests/${requestId}`, { method: "DELETE" });
+      if (response.ok) {
+        const updated = changeRequests.filter((r) => r.requestId !== requestId);
+        setChangeRequests(updated);
+        localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
+        return;
+      }
+    } catch (err) {
+      console.warn("Express delete change request failed:", err);
+    }
+
+    const updated = changeRequests.filter((r) => r.requestId !== requestId);
+    setChangeRequests(updated);
+    localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
+  };
+
+  const openSimulatorModal = (row: SalaryRecord) => {
+    setSimulatingRow(row);
+    setSimName(row.teacherName);
+    setSimSubject(row.subject);
+    setSimSemester(row.semester);
+    setSimPaymentMethod(row.paymentMethod);
+    setSimShash(row.shash);
+    setSimMeetings(row.meetings);
+    setSimRate(row.rate);
+    setSimTravel(row.travel || "בית שמש");
+    setShowSimulatorModal(true);
+  };
+
+  const closeSimulatorModal = () => {
+    setShowSimulatorModal(false);
+    setSimulatingRow(null);
+  };
+
+  const approveChangeRequest = async (requestId: number) => {
+    const req = changeRequests.find((r) => r.requestId === requestId);
+    if (!req) return;
+
+    const rowIdx = records.findIndex((r) => r.id === req.rowId);
+    if (rowIdx !== -1) {
+      const updatedRow: SalaryRecord = {
+        ...records[rowIdx],
+        teacherName: req.proposed.teacherName,
+        subject: req.proposed.subject,
+        semester: req.proposed.semester,
+        paymentMethod: req.proposed.paymentMethod,
+        shash: req.proposed.shash,
+        meetings: req.proposed.meetings,
+        rate: req.proposed.rate,
+        totalHours: req.proposed.totalHours || records[rowIdx].totalHours,
+        employerOverhead: req.proposed.employerOverhead || records[rowIdx].employerOverhead,
+        totalAnnual: req.proposed.totalAnnual,
+        travel: req.proposed.travel || records[rowIdx].travel,
+        isContractReady: false,
+      };
+
+      setLoading(true);
+      try {
+        const response = await fetch("/api/records", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedRow),
+        });
+        if (!response.ok) throw new Error("Save failed");
+      } catch {
+        const localData = localStorage.getItem("sz_local_records_v2");
+        let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+        localRows = localRows.map((r) => (r.id === updatedRow.id ? updatedRow : r));
+        localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    await removeChangeRequest(requestId);
+    await fetchRecords();
+    await fetchChangeRequests();
+    setShowRequestsQueueModal(false);
+    triggerAlert("השינוי אושר בהצלחה!", "success", "שינוי אושר");
+  };
+
+  const rejectChangeRequest = (requestId: number) => {
+    const req = changeRequests.find((r) => r.requestId === requestId);
+    if (!req) return;
+    triggerConfirm(
+      `האם את בטוחה שברצונך להסיר את בקשת השינוי של משרת המורה "${req.current.teacherName}"?`,
+      async () => {
+        await removeChangeRequest(requestId);
+        await fetchChangeRequests();
+        setShowRequestsQueueModal(false);
+        triggerAlert(
+          "הבקשה הוסרה מרשימת ההמתנה. מומלץ לשלוח הודעה לרכזת על סיבת הדחייה.",
+          "info",
+          "בקשה הוסרה"
+        );
+      }
+    );
+  };
+
+  const toggleExecutionView = () => {
+    setIsExecutionViewActive((prev) => !prev);
+  };
+
+  const updateMonthlyHourValue = async (teacherId: number, month: string, valueStr: string) => {
+    const idx = records.findIndex((item) => item.id === teacherId);
+    if (idx === -1) return;
+
+    const cleanedVal = valueStr.trim().replace(/[^\d.]/g, "");
+    const hours = parseFloat(cleanedVal) || 0;
+    const updatedRow: SalaryRecord = {
+      ...records[idx],
+      monthlyHours: { ...(records[idx].monthlyHours || {}), [month]: hours },
+    };
+
+    setRecords((prev) => prev.map((r) => (r.id === teacherId ? updatedRow : r)));
+
+    try {
+      await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedRow),
+      });
+    } catch {
+      const localData = localStorage.getItem("sz_local_records_v2");
+      let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+      localRows = localRows.map((r) => (r.id === teacherId ? updatedRow : r));
+      localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+    }
+  };
+
+  const coordinatorSentRequests = useMemo(() => {
+    if (!activeTrack) return [];
+    return changeRequests.filter((req) => req.track === activeTrack);
+  }, [changeRequests, activeTrack]);
 
   // Switch role with password check
   const handleRoleSwitchInitiate = (targetRole: UserRole) => {
@@ -592,6 +809,70 @@ export default function App() {
     const totalAnnual = Math.round(totalHours * employerOverhead);
 
     return { totalHours, employerOverhead, totalAnnual };
+  };
+
+  const simCalculations = useMemo(() => {
+    return computeCalculations(simShash, simMeetings, simRate, simPaymentMethod);
+  }, [simShash, simMeetings, simRate, simPaymentMethod]);
+
+  const simBudgetStatus = useMemo(() => {
+    if (!simulatingRow) return null;
+    const track = simulatingRow.track;
+    const limit = TRACKS_BUDGET_LIMITS[track] || 150000;
+    let otherTotal = 0;
+    records.forEach((row) => {
+      if (row.track === track && row.id !== simulatingRow.id) {
+        otherTotal += row.totalAnnual || 0;
+      }
+    });
+    const newTotal = otherTotal + simCalculations.totalAnnual;
+    const difference = simCalculations.totalAnnual - simulatingRow.totalAnnual;
+    const remaining = limit - newTotal;
+    return { limit, difference, remaining, track };
+  }, [simulatingRow, simCalculations, records]);
+
+  const submitChangeRequest = async () => {
+    if (!simulatingRow) return;
+    if (!simName.trim() || !simSubject.trim()) {
+      triggerAlert("חובה למלא את שם המורה והמקצוע לפני הגשת הבקשה!", "error");
+      return;
+    }
+
+    const request: ChangeRequest = {
+      requestId: Date.now(),
+      rowId: simulatingRow.id,
+      track: simulatingRow.track,
+      current: {
+        teacherName: simulatingRow.teacherName,
+        subject: simulatingRow.subject,
+        semester: simulatingRow.semester,
+        paymentMethod: simulatingRow.paymentMethod,
+        shash: simulatingRow.shash,
+        meetings: simulatingRow.meetings,
+        rate: simulatingRow.rate,
+        totalAnnual: simulatingRow.totalAnnual,
+        travel: simulatingRow.travel,
+      },
+      proposed: {
+        teacherName: simName.trim(),
+        subject: simSubject.trim(),
+        semester: simSemester,
+        paymentMethod: simPaymentMethod,
+        shash: simShash,
+        meetings: simMeetings,
+        rate: simRate,
+        totalHours: simCalculations.totalHours,
+        employerOverhead: simCalculations.employerOverhead,
+        totalAnnual: simCalculations.totalAnnual,
+        travel: simTravel,
+      },
+      timestamp: new Date().toLocaleString("he-IL"),
+    };
+
+    await persistChangeRequest(request);
+    await fetchChangeRequests();
+    triggerAlert("בקשת השינוי והעדכון נשלחה בהצלחה אל המזכירה האחראית לבחינה ואישור! 📤", "success");
+    closeSimulatorModal();
   };
 
   // Add empty row
@@ -1333,6 +1614,7 @@ ____________________                    _____________________                   
   const logout = () => {
     setRole("guest");
     setActiveTrack(null);
+    setIsExecutionViewActive(false);
   };
 
   return (
@@ -1506,14 +1788,40 @@ ____________________                    _____________________                   
                         </button>
                       </div>
 
-                      <div className="flex gap-1.5 justify-start lg:justify-end">
-                        {/* Database URL Config Button */}
-                        <button
-                          onClick={() => { setConnectionTestResult(null); setShowDbConfigModal(true); }}
-                          className="text-[10px] bg-slate-50 text-slate-600 hover:bg-slate-100 font-medium px-2.5 py-1 rounded border border-slate-200 transition-all shadow-sm cursor-pointer"
-                        >
-                          <Database className="w-3 h-3 inline ml-1 text-slate-500" /> הגדרות מסד נתונים 🗄️
-                        </button>
+                      <div className="flex gap-1.5 justify-start lg:justify-end flex-wrap">
+                        {(role === "director" || role === "secretary") && (
+                          <button
+                            onClick={() => setShowRequestsQueueModal(true)}
+                            className="text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 font-extrabold px-2.5 py-1 rounded border border-rose-200 transition-all shadow-sm cursor-pointer flex items-center gap-1"
+                          >
+                            <Inbox className="w-3 h-3" />
+                            בקשות שינוי ממתינות
+                            {changeRequests.length > 0 && (
+                              <span className="bg-rose-600 text-white rounded-full px-1.5 text-[9px] font-black">
+                                {changeRequests.length}
+                              </span>
+                            )}
+                          </button>
+                        )}
+
+                        {role === "secretary" && (
+                          <button
+                            onClick={toggleExecutionView}
+                            className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-extrabold px-2.5 py-1 rounded border border-emerald-200 transition-all shadow-sm cursor-pointer flex items-center gap-1"
+                          >
+                            <ChartLine className="w-3 h-3" />
+                            {isExecutionViewActive ? "חזרה לניהול תקציב 📋" : "דיווח וביצוע שעות 📊"}
+                          </button>
+                        )}
+
+                        {(role === "director" || role === "secretary") && (
+                          <button
+                            onClick={() => { setConnectionTestResult(null); setShowDbConfigModal(true); }}
+                            className="text-[10px] bg-slate-50 text-slate-600 hover:bg-slate-100 font-medium px-2.5 py-1 rounded border border-slate-200 transition-all shadow-sm cursor-pointer"
+                          >
+                            <Database className="w-3 h-3 inline ml-1 text-slate-500" /> הגדרות מסד נתונים 🗄️
+                          </button>
+                        )}
 
                         {/* Password helper for Director only */}
                         {role === "director" && (
@@ -1597,6 +1905,8 @@ ____________________                    _____________________                   
                 </span>
               </div>
 
+              {!isExecutionViewActive ? (
+              <>
               {/* Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {/* Total Budget Card */}
@@ -1818,7 +2128,52 @@ ____________________                    _____________________                   
                 )}
               </div>
 
-
+              {/* Coordinator sent requests tracking */}
+              {role === "coordinator" && coordinatorSentRequests.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Send className="w-5 h-5 text-sky-600" />
+                    <h3 className="font-bold text-slate-900">מעקב בקשות שינוי ששלחת 📤</h3>
+                  </div>
+                  <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-right text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                          <th className="p-2">תאריך</th>
+                          <th className="p-2">מורה</th>
+                          <th className="p-2">מקצוע</th>
+                          <th className="p-2">תעריף שנתי נוכחי</th>
+                          <th className="p-2">תעריף שנתי מבוקש</th>
+                          <th className="p-2 text-center">הפרש כספי</th>
+                          <th className="p-2 text-center">סטטוס</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {coordinatorSentRequests.map((req) => {
+                          const diff = req.proposed.totalAnnual - req.current.totalAnnual;
+                          return (
+                            <tr key={req.requestId} className="hover:bg-slate-50">
+                              <td className="p-2 text-slate-500">{req.timestamp}</td>
+                              <td className="p-2 font-bold">{req.proposed.teacherName}</td>
+                              <td className="p-2">{req.proposed.subject}</td>
+                              <td className="p-2">₪{req.current.totalAnnual.toLocaleString()}</td>
+                              <td className="p-2 font-bold">₪{req.proposed.totalAnnual.toLocaleString()}</td>
+                              <td className={`p-2 text-center font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                {diff >= 0 ? "+" : ""}₪{diff.toLocaleString()}
+                              </td>
+                              <td className="p-2 text-center">
+                                <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
+                                  ממתין לאישור המזכירה ⏳
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Main Spreadsheet container */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
@@ -1837,47 +2192,48 @@ ____________________                    _____________________                   
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right border-collapse min-w-[2000px]">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-right border-collapse table-fixed">
                     <thead>
                       <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider">
-                        <th className="p-3.5 text-center w-52 bg-slate-200/50 text-slate-900 font-extrabold">
+                        <th className="p-3 text-center w-[9%] bg-slate-200/50 text-slate-900 font-extrabold">
                           סטטוס וחוזים
                         </th>
-                        <th className="p-3.5 w-32 text-right">התמחות</th>
-                        <th className="p-3.5 w-24 text-center">שנה</th>
-                        <th className="p-3.5 w-56 text-right">שם המורה</th>
-                        <th className="p-3.5 w-56 text-right">שם המקצוע</th>
-                        <th className="p-3.5 w-48 text-right">סמסטר / מחזור</th>
-                        <th className="p-3.5 w-44 text-center">צורת תשלום</th>
-                        <th className="p-3.5 text-center w-20">ש"ש</th>
-                        <th className="p-3.5 text-center w-28">חודשים / מפגשים</th>
-                        <th className="p-3.5 text-center w-32 bg-amber-50/20 text-amber-900 font-bold">
+                        <th className="p-3 w-[7%] text-right hidden lg:table-cell">התמחות</th>
+                        <th className="p-3 w-[4%] text-center">שנה</th>
+                        <th className="p-3 w-[10%] text-right">שם המורה</th>
+                        <th className="p-3 w-[10%] text-right hidden md:table-cell">שם המקצוע</th>
+                        <th className="p-3 w-[8%] text-right hidden xl:table-cell">סמסטר / מחזור</th>
+                        <th className="p-3 w-[8%] text-center hidden lg:table-cell">צורת תשלום</th>
+                        <th className="p-3 text-center w-[4%]">ש"ש</th>
+                        <th className="p-3 text-center w-[5%] hidden md:table-cell">חודשים / מפגשים</th>
+                        <th className="p-3 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold">
                           שעות שנתיות
                         </th>
-                        <th className="p-3.5 text-center w-24">תעריף לשעה</th>
-                        <th className="p-3.5 text-center w-28 bg-indigo-50/30">
+                        <th className="p-3 text-center w-[5%] hidden lg:table-cell">תעריף לשעה</th>
+                        <th className="p-3 text-center w-[6%] bg-indigo-50/30 hidden xl:table-cell">
                           עלות מעביד לשעה
                         </th>
-                        <th className="p-3.5 text-center w-32 bg-indigo-50/50 text-indigo-900 font-extrabold">
+                        <th className="p-3 text-center w-[7%] bg-indigo-50/50 text-indigo-900 font-extrabold">
                           סה"כ שנתי
                         </th>
-                        <th className="p-3.5 text-center w-32">ת.ז מורה</th>
-                        <th className="p-3.5 text-center w-36">טלפון מורה *</th>
-                        <th className="p-3.5 text-center w-48">אימייל מורה *</th>
-                        <th className="p-3.5 text-center w-28 bg-slate-100/50">פעולות</th>
+                        <th className="p-3 w-[6%] text-right hidden 2xl:table-cell">נסיעות</th>
+                        <th className="p-3 w-[7%] text-right hidden 2xl:table-cell">מועד נתינת ציון</th>
+                        <th className="p-3 text-center w-[6%] hidden xl:table-cell">ת.ז מורה</th>
+                        <th className="p-3 text-center w-[7%] hidden lg:table-cell">טלפון מורה *</th>
+                        <th className="p-3 text-center w-[8%] hidden xl:table-cell">אימייל מורה *</th>
+                        <th className="p-3 text-center w-[6%] bg-slate-100/50">פעולות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm">
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={17} className="text-center py-12 text-slate-400 font-bold">
-                            لا נמצאו משרות העונות על פילוח הסינון הנוכחי.
+                          <td colSpan={19} className="text-center py-12 text-slate-400 font-bold">
+                            לא נמצאו משרות העונות על פילוח הסינון הנוכחי.
                           </td>
                         </tr>
                       ) : (
                         filteredRecords.map((item) => {
-                          const isEditing = activeEditingId === item.id;
                           const jobCount = records.filter(
                             (r) =>
                               r.teacherName &&
@@ -1981,25 +2337,25 @@ ____________________                    _____________________                   
                               </td>
 
                               {/* View-Only Columns */}
-                              <td className="p-3.5 border-b border-slate-100 font-semibold text-slate-700 align-middle">
+                              <td className="p-3 border-b border-slate-100 font-semibold text-slate-700 align-middle hidden lg:table-cell truncate">
                                 {item.track}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
                                 {item.year}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 font-bold text-slate-900 max-w-[220px] truncate align-middle">
+                              <td className="p-3 border-b border-slate-100 font-bold text-slate-900 truncate align-middle" title={item.teacherName}>
                                 {item.teacherName || "—"}
                                 {multipleJobsBadge}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 font-medium text-slate-800 max-w-[220px] truncate align-middle">
+                              <td className="p-3 border-b border-slate-100 font-medium text-slate-800 truncate align-middle hidden md:table-cell" title={item.subject}>
                                 {item.subject || "—"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-slate-600 align-middle">
+                              <td className="p-3 border-b border-slate-100 text-slate-600 align-middle hidden xl:table-cell truncate">
                                 {item.semester || "שנתי"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
-                                  className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${
                                     item.paymentMethod === "תקן"
                                       ? "bg-indigo-50 text-indigo-800 border border-indigo-100"
                                       : item.paymentMethod === "שכר מרצים"
@@ -2019,60 +2375,70 @@ ____________________                    _____________________                   
                                     : " (0%)"}
                                 </span>
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle">
                                 {item.shash}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle hidden md:table-cell">
                                 {item.meetings}{" "}
                                 <span className="text-[10px] text-slate-400 block">
                                   {item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}
                                 </span>
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
                                 {item.totalHours}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-semibold align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-semibold align-middle hidden lg:table-cell">
                                 ₪{item.rate}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-indigo-50/30 align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-indigo-50/30 align-middle hidden xl:table-cell">
                                 ₪{item.employerOverhead.toLocaleString()}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-black text-indigo-700 bg-indigo-50/50 align-middle">
                                 ₪{item.totalAnnual.toLocaleString()}
                               </td>
-                              {/* TRAVEL DISPLAY */}
-                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
                                 {item.travel || "בית שמש"}
                               </td>
-                              {/* GRADE TIMING DISPLAY */}
-                              <td className="p-3.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700">
+                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
                                 {item.gradeTiming || "ציון אחד בסוף שנה"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center font-mono align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center font-mono align-middle hidden xl:table-cell truncate">
                                 {item.tz || "—"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center align-middle">
+                              <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell truncate">
                                 {item.phone || "—"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 max-w-[180px] truncate align-middle">
+                              <td className="p-3 border-b border-slate-100 truncate align-middle hidden xl:table-cell" title={item.email}>
                                 {item.email || "—"}
                               </td>
-                              <td className="p-3.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
+                              <td className="p-3 border-b border-slate-100 text-center align-middle bg-slate-50/30">
                                 <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    onClick={() => handleEditRowStart(item)}
-                                    className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold p-1.5 rounded transition cursor-pointer"
-                                    title="עריכת נתונים"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteRow(item.id, item.teacherName)}
-                                    className="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold p-1.5 rounded transition cursor-pointer"
-                                    title="מחיקת שורה"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {item.isApproved && role === "coordinator" ? (
+                                    <button
+                                      onClick={() => openSimulatorModal(item)}
+                                      className="text-[10px] bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
+                                      title="הגשת בקשת עדכון משרה"
+                                    >
+                                      <Calculator className="w-3 h-3" /> בקשי שינוי
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => handleEditRowStart(item)}
+                                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                        title="עריכת נתונים"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteRow(item.id, item.teacherName)}
+                                        className="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                        title="מחיקת שורה"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -2264,6 +2630,87 @@ ____________________                    _____________________                   
                   </div>
                 </div>
               </div>
+              </>
+              ) : (
+              /* Execution reporting view */
+              <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-200 mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                      <ChartLine className="w-6 h-6 text-emerald-600" />
+                      מערכת דיווח חודשי וביצוע שעות (שכר מרצים)
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1">
+                      המזכירה האחראית עוקבת ומעדכנת כאן שעות ביצוע מדווחות בפועל מול שעות שהוקצו לכל מורה.
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleExecutionView}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    חזרה לניהול תקציב וחוזים
+                  </button>
+                </div>
+                <div className="overflow-x-auto custom-scrollbar mt-6">
+                  <table className="w-full text-right border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                        <th className="p-3">שם המורה</th>
+                        <th className="p-3">שם המקצוע</th>
+                        <th className="p-3 text-center bg-indigo-50/50">שעות שהוקצו</th>
+                        <th className="p-3 text-center bg-indigo-50/50">תעריף</th>
+                        {MONTH_LABELS.map((label) => (
+                          <th key={label} className="p-2 text-center w-12">{label}</th>
+                        ))}
+                        <th className="p-3 text-center bg-emerald-50">שעות שבוצעו</th>
+                        <th className="p-3 text-center bg-amber-50">יתרת שעות</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {records.filter((r) => r.paymentMethod === "שכר מרצים").length === 0 ? (
+                        <tr>
+                          <td colSpan={16} className="text-center py-10 text-slate-400 font-bold">
+                            אין מורות המועסקות בשכר מרצים במערכת כרגע.
+                          </td>
+                        </tr>
+                      ) : (
+                        records
+                          .filter((r) => r.paymentMethod === "שכר מרצים")
+                          .map((item) => {
+                            const monthly = item.monthlyHours || {};
+                            const totalDone = MONTH_KEYS.reduce((sum, m) => sum + (parseFloat(String(monthly[m] || 0)) || 0), 0);
+                            const allocated = item.totalHours || 0;
+                            const remaining = allocated - totalDone;
+                            const isOver = remaining < 0;
+                            return (
+                              <tr key={item.id} className={isOver ? "bg-rose-50/80" : remaining === 0 ? "bg-emerald-50/50" : "hover:bg-slate-50"}>
+                                <td className="p-3 font-bold">{item.teacherName}<span className="text-[10px] text-slate-400 block">{item.track}</span></td>
+                                <td className="p-3 text-slate-600 truncate max-w-[150px]">{item.subject}</td>
+                                <td className="p-3 text-center bg-indigo-50/30 font-black">{allocated} ש'</td>
+                                <td className="p-3 text-center bg-indigo-50/30 font-bold">₪{item.rate}</td>
+                                {MONTH_KEYS.map((m) => (
+                                  <td key={m} className="p-1 text-center">
+                                    <input
+                                      type="text"
+                                      value={monthly[m] !== undefined ? monthly[m] : 0}
+                                      onChange={(e) => updateMonthlyHourValue(item.id, m, e.target.value)}
+                                      className="w-10 text-center text-xs font-bold border border-slate-200 rounded p-1 focus:outline-none focus:border-emerald-500 bg-white"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="p-3 text-center bg-emerald-50 font-black">{totalDone} ש'</td>
+                                <td className={`p-3 text-center font-black ${isOver ? "text-rose-700 bg-rose-100" : "bg-slate-100"}`}>
+                                  {remaining} ש'
+                                </td>
+                              </tr>
+                            );
+                          })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              )}
             </main>
           </motion.div>
         )}
@@ -3023,6 +3470,177 @@ ____________________                    _____________________                   
               >
                 {activeEditingId < 0 ? "הוספת משרה" : "שמירת שינויים"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. SIMULATOR & CHANGE REQUEST MODAL */}
+      {showSimulatorModal && simulatingRow && (
+        <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-4">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Calculator className="w-5 h-5 text-indigo-600" />
+                סימולטור ובקשת עדכון משרה - <span className="text-indigo-600">{simulatingRow.teacherName}</span>
+              </h3>
+              <button onClick={closeSimulatorModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+            </div>
+            <div className="flex-grow overflow-y-auto space-y-5 pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">מצב מאושר נוכחי</span>
+                  <div className="mt-2 text-xs space-y-1 font-semibold text-slate-700">
+                    <div>מקצוע: {simulatingRow.subject}</div>
+                    <div>צורת תשלום: {simulatingRow.paymentMethod}</div>
+                    <div>שעות שנתיות: {simulatingRow.totalHours}</div>
+                    <div>תעריף: ₪{simulatingRow.rate}</div>
+                    <div className="pt-2 text-sm font-black border-t border-slate-200 mt-2">סה"כ שנתי: ₪{simulatingRow.totalAnnual.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl">
+                  <span className="text-[11px] font-bold text-indigo-400 uppercase">מצב מוצע (סימולציה)</span>
+                  <div className="mt-2 text-xs space-y-1 font-semibold text-indigo-950">
+                    <div>מקצוע: {simSubject}</div>
+                    <div>צורת תשלום: {simPaymentMethod}</div>
+                    <div>שעות שנתיות: {simCalculations.totalHours}</div>
+                    <div>תעריף: ₪{simRate}</div>
+                    <div className="pt-2 text-sm font-black border-t border-indigo-200 mt-2">סה"כ שנתי מוצע: ₪{simCalculations.totalAnnual.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המורה</label>
+                  <input type="text" value={simName} onChange={(e) => setSimName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המקצוע</label>
+                  <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">סמסטר / מחזור</label>
+                  <select value={simSemester} onChange={(e) => setSimSemester(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="שנתי">שנתי</option>
+                    <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
+                    <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
+                    <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
+                    <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">צורת תשלום</label>
+                  <select value={simPaymentMethod} onChange={(e) => setSimPaymentMethod(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="תקן">תקן (+45%)</option>
+                    <option value="שכר מרצים">שכר מרצים (+30%)</option>
+                    <option value="קבלה">קבלה (+18%)</option>
+                    <option value="קבלת פטור">קבלת פטור (0%)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">ש"ש</label>
+                  <input type="text" value={simShash} onChange={(e) => setSimShash(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">מפגשים/חודשים</label>
+                  <input type="text" value={simMeetings} onChange={(e) => setSimMeetings(parseInt(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">תעריף לשעה</label>
+                  <input type="text" value={simRate} onChange={(e) => setSimRate(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">נסיעות</label>
+                  <select value={simTravel} onChange={(e) => setSimTravel(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-indigo-500">
+                    <option value="בית שמש">בית שמש</option>
+                    <option value="ירושלים">ירושלים</option>
+                    <option value="ביתר">ביתר</option>
+                    <option value="מודיעין עילית">מודיעין עילית</option>
+                    <option value="בני ברק">בני ברק</option>
+                  </select>
+                </div>
+              </div>
+              {simBudgetStatus && (
+                <div className={`p-4 rounded-2xl border text-xs font-semibold ${simBudgetStatus.remaining >= 0 ? "bg-emerald-50 text-emerald-900 border-emerald-200" : "bg-rose-50 text-rose-900 border-rose-200"}`}>
+                  {simBudgetStatus.remaining >= 0 ? (
+                    <>
+                      <div className="font-extrabold text-emerald-800">סטטוס תקציב מסלול {simBudgetStatus.track}: תקין ✅</div>
+                      <div>הפרש שינוי: {simBudgetStatus.difference >= 0 ? "+" : ""}₪{simBudgetStatus.difference.toLocaleString()}</div>
+                      <div>יתרה פנויה: ₪{simBudgetStatus.remaining.toLocaleString()} (מתוך ₪{simBudgetStatus.limit.toLocaleString()})</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-extrabold text-rose-800">🔴 אזהרה: השינוי יוצר חריגה מתקציב המסלול!</div>
+                      <div>הפרש שינוי: +₪{simBudgetStatus.difference.toLocaleString()}</div>
+                      <div>חריגה: ₪{Math.abs(simBudgetStatus.remaining).toLocaleString()}</div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-5 pt-3 border-t">
+              <button onClick={submitChangeRequest} className="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm transition cursor-pointer flex items-center justify-center gap-1">
+                <Send className="w-4 h-4" /> שלחי בקשת שינוי למזכירה 📤
+              </button>
+              <button onClick={closeSimulatorModal} className="flex-grow bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-sm transition cursor-pointer">ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. CHANGE REQUESTS QUEUE MODAL */}
+      {showRequestsQueueModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[115] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-4">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-rose-600" />
+                בקשות שינוי תקציביות ממתינות - תשפ"ז
+              </h3>
+              <button onClick={() => setShowRequestsQueueModal(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+            </div>
+            <div className="flex-grow overflow-y-auto pr-1 space-y-4">
+              {changeRequests.length === 0 ? (
+                <div className="p-10 text-center font-bold text-slate-400">אין בקשות שינוי תקציביות הממתינות לאישור כעת.</div>
+              ) : (
+                changeRequests.map((req) => {
+                  const diff = req.proposed.totalAnnual - req.current.totalAnnual;
+                  return (
+                    <div key={req.requestId} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-2 border-b gap-2">
+                        <div>
+                          <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-full">רכזת מסלול: {req.track}</span>
+                          <span className="text-[11px] text-slate-400 mr-2">הוגש ב: {req.timestamp}</span>
+                        </div>
+                        <span className={`text-xs font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                          {diff >= 0 ? `תוספת של ₪${diff.toLocaleString()}` : `חיסכון של ₪${Math.abs(diff).toLocaleString()}`}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div className="bg-white p-3 rounded-xl border border-slate-150">
+                          <span className="font-bold text-slate-400 block mb-1">מצב מאושר נוכחי</span>
+                          <p>מורה: <strong>{req.current.teacherName}</strong></p>
+                          <p>מקצוע: {req.current.subject}</p>
+                          <p>עלות שנתית: <strong>₪{req.current.totalAnnual.toLocaleString()}</strong></p>
+                        </div>
+                        <div className="bg-indigo-50/20 p-3 rounded-xl border border-indigo-100/50">
+                          <span className="font-bold text-indigo-500 block mb-1">שינוי מוצע מבוקש</span>
+                          <p>מורה: <strong>{req.proposed.teacherName}</strong></p>
+                          <p>מקצוע: {req.proposed.subject} ({req.proposed.semester})</p>
+                          <p>עלות מוצעת: <strong className="text-indigo-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2 border-t">
+                        <button onClick={() => approveChangeRequest(req.requestId)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">אשר ועדכן ✅</button>
+                        <button onClick={() => rejectChangeRequest(req.requestId)} className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">דחה בקשה ❌</button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="flex justify-end pt-3 border-t mt-4">
+              <button onClick={() => setShowRequestsQueueModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-5 rounded-xl text-xs transition cursor-pointer">סגירה</button>
             </div>
           </div>
         </div>
