@@ -1946,7 +1946,7 @@ ____________________                    _____________________                   
           >
             {/* Header */}
             <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm no-print">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex flex-col lg:flex-row justify-between items-center py-4 lg:h-20 gap-4">
                   {/* Seminar Logo & Identity */}
                   <div className="flex items-center gap-3">
@@ -2086,7 +2086,7 @@ ____________________                    _____________________                   
             </header>
 
             {/* Main Content Area */}
-            <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+            <main className="flex-grow max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
               {!isExecutionViewActive ? (
               <>
               {/* Metrics Grid */}
@@ -2357,37 +2357,37 @@ ____________________                    _____________________                   
                   </div>
                 </div>
 
-                <div className="overflow-hidden">
-                  <table className="w-full text-right border-collapse table-fixed">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right border-collapse table-auto min-w-full">
                     <thead>
                       <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider">
-                        <th className="p-2 text-center w-[9%] bg-slate-200/50 text-slate-900 font-extrabold">
+                        <th className="p-2 text-center min-w-[130px] bg-slate-200/50 text-slate-900 font-extrabold">
                           סטטוס וחוזים
                         </th>
-                        <th className="p-2 w-[7%] text-right hidden lg:table-cell">התמחות</th>
-                        <th className="p-2 w-[4%] text-center">שנה</th>
-                        <th className="p-2 w-[10%] text-right">שם המורה</th>
-                        <th className="p-2 w-[10%] text-right hidden md:table-cell">שם המקצוע</th>
-                        <th className="p-1.5 w-[5%] text-right text-[10px] leading-tight hidden lg:table-cell">מחצית</th>
-                        <th className="p-2 w-[8%] text-center hidden lg:table-cell">צורת תשלום</th>
-                        <th className="p-2 text-center w-[4%]">ש"ש</th>
-                        <th className="p-2 text-center w-[5%] hidden md:table-cell">חודשים / מפגשים</th>
-                        <th className="p-2 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold">
+                        <th className="p-2 text-right hidden lg:table-cell min-w-[72px]">התמחות</th>
+                        <th className="p-2 text-center min-w-[36px]">שנה</th>
+                        <th className="p-2 text-right min-w-[88px]">שם המורה</th>
+                        <th className="p-2 text-right hidden md:table-cell min-w-[80px]">שם המקצוע</th>
+                        <th className="p-2 text-right text-xs leading-tight hidden lg:table-cell min-w-[118px] whitespace-nowrap">מחצית / מחזור</th>
+                        <th className="p-2 text-center hidden lg:table-cell min-w-[92px]">צורת תשלום</th>
+                        <th className="p-2 text-center min-w-[40px]">ש"ש</th>
+                        <th className="p-2 text-center min-w-[72px] hidden md:table-cell">חודשים / מפגשים</th>
+                        <th className="p-2 text-center min-w-[64px] bg-amber-50/20 text-amber-900 font-bold">
                           שעות שנתיות
                         </th>
-                        <th className="p-2 text-center w-[5%] hidden lg:table-cell">תעריף לשעה</th>
-                        <th className="p-2 text-center w-[6%] bg-emerald-50/30 hidden xl:table-cell">
+                        <th className="p-2 text-center min-w-[64px] hidden lg:table-cell">תעריף לשעה</th>
+                        <th className="p-2 text-center min-w-[72px] bg-emerald-50/30 hidden xl:table-cell">
                           עלות מעביד לשעה
                         </th>
-                        <th className="p-2 text-center w-[7%] bg-emerald-50/50 text-emerald-900 font-extrabold">
+                        <th className="p-2 text-center min-w-[72px] bg-emerald-50/50 text-emerald-900 font-extrabold">
                           סה"כ שנתי
                         </th>
-                        <th className="p-1.5 w-[4%] text-center text-[10px] leading-tight hidden lg:table-cell">נסיעות</th>
-                        <th className="p-1.5 w-[5%] text-center text-[10px] leading-tight hidden lg:table-cell">מועד ציון</th>
-                        <th className="p-3 text-center w-[6%] hidden xl:table-cell">ת.ז מורה</th>
-                        <th className="p-3 text-center w-[7%] hidden lg:table-cell">טלפון מורה *</th>
-                        <th className="p-3 text-center w-[8%] hidden xl:table-cell">אימייל מורה *</th>
-                        <th className="p-3 text-center w-[6%] bg-slate-100/50">פעולות</th>
+                        <th className="p-2 text-center text-xs leading-tight hidden lg:table-cell min-w-[100px] whitespace-nowrap">נסיעות</th>
+                        <th className="p-2 text-center text-xs leading-tight hidden lg:table-cell min-w-[128px] whitespace-nowrap">מועד נתינת ציון</th>
+                        <th className="p-2 text-center min-w-[88px] hidden xl:table-cell">ת.ז מורה</th>
+                        <th className="p-2 text-center min-w-[96px] hidden lg:table-cell">טלפון מורה *</th>
+                        <th className="p-2 text-center min-w-[120px] hidden xl:table-cell">אימייל מורה *</th>
+                        <th className="p-2 text-center min-w-[88px] bg-slate-100/50">פעולות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-sm">
@@ -2719,8 +2719,7 @@ ____________________                    _____________________                   
                                 {item.subject || "—"}
                               </td>
                               <td
-                                className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
-                                title={formatSemesterDisplay(item.semester)}
+                                className="p-2 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
                               >
                                 {formatSemesterDisplay(item.semester)}
                               </td>
@@ -2761,14 +2760,12 @@ ____________________                    _____________________                   
                                 ₪{item.totalAnnual.toLocaleString()}
                               </td>
                               <td
-                                className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
-                                title={item.travel || "בית שמש"}
+                                className="p-2 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
                               >
                                 {item.travel || "בית שמש"}
                               </td>
                               <td
-                                className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
-                                title={formatGradeTimingDisplay(item.gradeTiming) || undefined}
+                                className="p-2 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
                               >
                                 {formatGradeTimingDisplay(item.gradeTiming)}
                               </td>
