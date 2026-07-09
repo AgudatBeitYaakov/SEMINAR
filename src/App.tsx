@@ -2183,23 +2183,6 @@ ____________________                    _____________________                   
                     </button>
                   </div>
                 </div>
-
-                {/* Coordinator notice banner */}
-                {role === "coordinator" && activeTrack && (
-                  <div className="mt-4 p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-sm flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
-                      <span>
-                        שלום <strong>רכזת התמחות {activeTrack}</strong>. המערכת מציגה ומאפשרת לך לדווח
-                        רק עבור המקצועות והמורים השייכים להתמחות שלך.
-                      </span>
-                    </div>
-                    <div className="text-xs font-bold text-emerald-600 bg-white px-2.5 py-1 rounded-md border border-emerald-100 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      <span>הטבלה שלך נשמרת ישירות למסד הנתונים</span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Coordinator sent requests tracking */}
