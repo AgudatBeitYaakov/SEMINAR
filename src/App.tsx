@@ -2357,33 +2357,33 @@ ____________________                    _____________________                   
                   </div>
                 </div>
 
-                <div className="overflow-x-auto custom-scrollbar">
+                <div className="overflow-hidden">
                   <table className="w-full text-right border-collapse table-fixed">
                     <thead>
                       <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider">
-                        <th className="p-3 text-center w-[9%] bg-slate-200/50 text-slate-900 font-extrabold">
+                        <th className="p-2 text-center w-[9%] bg-slate-200/50 text-slate-900 font-extrabold">
                           סטטוס וחוזים
                         </th>
-                        <th className="p-3 w-[7%] text-right hidden lg:table-cell">התמחות</th>
-                        <th className="p-3 w-[4%] text-center">שנה</th>
-                        <th className="p-3 w-[10%] text-right">שם המורה</th>
-                        <th className="p-3 w-[10%] text-right hidden md:table-cell">שם המקצוע</th>
-                        <th className="p-3 w-[8%] text-right hidden xl:table-cell">מחצית / מחזור</th>
-                        <th className="p-3 w-[8%] text-center hidden lg:table-cell">צורת תשלום</th>
-                        <th className="p-3 text-center w-[4%]">ש"ש</th>
-                        <th className="p-3 text-center w-[5%] hidden md:table-cell">חודשים / מפגשים</th>
-                        <th className="p-3 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold">
+                        <th className="p-2 w-[7%] text-right hidden lg:table-cell">התמחות</th>
+                        <th className="p-2 w-[4%] text-center">שנה</th>
+                        <th className="p-2 w-[10%] text-right">שם המורה</th>
+                        <th className="p-2 w-[10%] text-right hidden md:table-cell">שם המקצוע</th>
+                        <th className="p-1.5 w-[5%] text-right text-[10px] leading-tight hidden lg:table-cell">מחצית</th>
+                        <th className="p-2 w-[8%] text-center hidden lg:table-cell">צורת תשלום</th>
+                        <th className="p-2 text-center w-[4%]">ש"ש</th>
+                        <th className="p-2 text-center w-[5%] hidden md:table-cell">חודשים / מפגשים</th>
+                        <th className="p-2 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold">
                           שעות שנתיות
                         </th>
-                        <th className="p-3 text-center w-[5%] hidden lg:table-cell">תעריף לשעה</th>
-                        <th className="p-3 text-center w-[6%] bg-emerald-50/30 hidden xl:table-cell">
+                        <th className="p-2 text-center w-[5%] hidden lg:table-cell">תעריף לשעה</th>
+                        <th className="p-2 text-center w-[6%] bg-emerald-50/30 hidden xl:table-cell">
                           עלות מעביד לשעה
                         </th>
-                        <th className="p-3 text-center w-[7%] bg-emerald-50/50 text-emerald-900 font-extrabold">
+                        <th className="p-2 text-center w-[7%] bg-emerald-50/50 text-emerald-900 font-extrabold">
                           סה"כ שנתי
                         </th>
-                        <th className="p-3 w-[6%] text-right hidden 2xl:table-cell">נסיעות</th>
-                        <th className="p-3 w-[7%] text-right hidden 2xl:table-cell">מועד נתינת ציון</th>
+                        <th className="p-1.5 w-[4%] text-center text-[10px] leading-tight hidden lg:table-cell">נסיעות</th>
+                        <th className="p-1.5 w-[5%] text-center text-[10px] leading-tight hidden lg:table-cell">מועד ציון</th>
                         <th className="p-3 text-center w-[6%] hidden xl:table-cell">ת.ז מורה</th>
                         <th className="p-3 text-center w-[7%] hidden lg:table-cell">טלפון מורה *</th>
                         <th className="p-3 text-center w-[8%] hidden xl:table-cell">אימייל מורה *</th>
@@ -2718,12 +2718,16 @@ ____________________                    _____________________                   
                               <td className="p-3 border-b border-slate-100 font-medium text-slate-800 truncate align-middle hidden md:table-cell" title={item.subject}>
                                 {item.subject || "—"}
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-slate-600 align-middle hidden xl:table-cell truncate">
+                              <td
+                                className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
+                                title={formatSemesterDisplay(item.semester)}
+                              >
                                 {formatSemesterDisplay(item.semester)}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${getPaymentMethodBadgeClass(item.paymentMethod)}`}
+                                  className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold inline-block max-w-full truncate ${getPaymentMethodBadgeClass(item.paymentMethod)}`}
+                                  title={`${item.paymentMethod}${item.paymentMethod === "תקן" ? " (+45%)" : item.paymentMethod === "שכר מרצים" ? " (+30%)" : item.paymentMethod === "קבלה" ? " (+18%)" : " (0%)"}`}
                                 >
                                   {item.paymentMethod}
                                   {item.paymentMethod === "תקן"
@@ -2756,10 +2760,16 @@ ____________________                    _____________________                   
                               <td className="p-3 border-b border-slate-100 text-center font-black text-emerald-700 bg-emerald-50/50 align-middle">
                                 ₪{item.totalAnnual.toLocaleString()}
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
+                              <td
+                                className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
+                                title={item.travel || "בית שמש"}
+                              >
                                 {item.travel || "בית שמש"}
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
+                              <td
+                                className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-[10px] leading-tight truncate overflow-hidden max-w-0"
+                                title={formatGradeTimingDisplay(item.gradeTiming) || undefined}
+                              >
                                 {formatGradeTimingDisplay(item.gradeTiming)}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center font-mono align-middle hidden xl:table-cell truncate">
