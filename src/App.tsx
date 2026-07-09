@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useLayoutEffect, useRef, memo, type ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   GraduationCap,
@@ -103,6 +103,90 @@ const getPaymentMethodBadgeClass = (paymentMethod: string) => {
   // קבלה + קבלת פטור — אותו צבע שלישי
   return "bg-amber-50 text-amber-800 border border-amber-200";
 };
+
+/** מקטין את גודל הטקסט בתא עד שהמלל נכנס לרוחב העמודה — לכל תא בנפרד */
+const AutoFitCellText = memo(function AutoFitCellText({
+  children,
+  className = "",
+  align = "right",
+  maxFontSize = 11,
+  minFontSize = 7,
+  maxLines = 2,
+}: {
+  children: ReactNode;
+  className?: string;
+  align?: "right" | "center" | "left";
+  maxFontSize?: number;
+  minFontSize?: number;
+  maxLines?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [fontSize, setFontSize] = useState(maxFontSize);
+
+  const text =
+    children === null || children === undefined
+      ? ""
+      : typeof children === "string" || typeof children === "number"
+      ? String(children)
+      : null;
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const el = textRef.current;
+    if (!container || !el || text === null) return;
+
+    const fit = () => {
+      if (container.clientWidth <= 0) return;
+
+      let size = maxFontSize;
+      const lineHeight = 1.2;
+
+      while (size >= minFontSize) {
+        el.style.fontSize = `${size}px`;
+        el.style.lineHeight = String(lineHeight);
+        const maxHeight = size * lineHeight * maxLines + 1;
+        const fitsWidth = el.scrollWidth <= container.clientWidth + 1;
+        const fitsHeight = el.scrollHeight <= maxHeight;
+        if (fitsWidth && fitsHeight) {
+          setFontSize(size);
+          return;
+        }
+        size -= 0.5;
+      }
+
+      setFontSize(minFontSize);
+    };
+
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [text, maxFontSize, minFontSize, maxLines]);
+
+  if (text === null) {
+    return <>{children}</>;
+  }
+
+  const alignClass =
+    align === "center" ? "text-center" : align === "left" ? "text-left" : "text-right";
+
+  return (
+    <div
+      ref={containerRef}
+      className={`w-full min-w-0 max-w-full overflow-hidden ${alignClass} ${className}`}
+    >
+      <span
+        ref={textRef}
+        style={{ fontSize: `${fontSize}px`, lineHeight: 1.2 }}
+        className="block w-full break-words leading-tight"
+        title={text || undefined}
+      >
+        {text || "—"}
+      </span>
+    </div>
+  );
+});
 
 export default function App() {
   // Authentication & Role State
@@ -1813,34 +1897,76 @@ ____________________                    _____________________                   
             exit={{ opacity: 0, y: -15 }}
             className="relative overflow-hidden flex-grow flex flex-col justify-center items-center bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100 py-12 px-4 sm:px-6 lg:px-8"
           >
-            {/* Floating water balloons drifting across the login screen (purely visual) */}
+            {/* Floating transparent water balloons drifting across the login screen */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
               {[
-                { size: 190, from: "from-emerald-300/50", to: "to-teal-400/40", top: "6%", left: "-6%", dx: 70, dy: 90, dur: 17, delay: 0, blur: "blur-xl" },
-                { size: 140, from: "from-teal-300/50", to: "to-cyan-400/40", top: "64%", left: "82%", dx: -60, dy: -80, dur: 21, delay: 1.5, blur: "blur-xl" },
-                { size: 110, from: "from-cyan-300/50", to: "to-emerald-400/40", top: "80%", left: "8%", dx: 55, dy: -70, dur: 19, delay: 0.8, blur: "blur-lg" },
-                { size: 160, from: "from-emerald-200/50", to: "to-teal-300/40", top: "16%", left: "74%", dx: -50, dy: 90, dur: 23, delay: 2.2, blur: "blur-xl" },
-                { size: 90, from: "from-teal-200/60", to: "to-cyan-300/40", top: "40%", left: "42%", dx: 45, dy: -75, dur: 15, delay: 1.1, blur: "blur-lg" },
-                { size: 70, from: "from-emerald-300/60", to: "to-cyan-200/40", top: "30%", left: "20%", dx: 40, dy: 80, dur: 14, delay: 0.4, blur: "blur-md" },
-                { size: 120, from: "from-cyan-200/50", to: "to-teal-300/40", top: "52%", left: "60%", dx: -40, dy: -60, dur: 20, delay: 1.9, blur: "blur-lg" }
-              ].map((s, i) => (
-                <motion.div
-                  key={i}
-                  className={`absolute rounded-full bg-gradient-to-br ${s.from} ${s.to} ${s.blur} shadow-inner`}
-                  style={{ width: s.size, height: s.size, top: s.top, left: s.left }}
-                  animate={{
-                    x: [0, s.dx, 0],
-                    y: [0, s.dy, 0],
-                    scale: [1, 1.12, 0.96, 1]
-                  }}
-                  transition={{
-                    duration: s.dur,
-                    delay: s.delay,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                />
-              ))}
+                { size: 200, top: "4%", left: "-4%", dx: 80, dy: 100, dur: 18, delay: 0, tint: "emerald" },
+                { size: 155, top: "62%", left: "84%", dx: -70, dy: -90, dur: 22, delay: 1.2, tint: "teal" },
+                { size: 125, top: "78%", left: "6%", dx: 60, dy: -75, dur: 20, delay: 0.6, tint: "cyan" },
+                { size: 175, top: "14%", left: "76%", dx: -55, dy: 95, dur: 24, delay: 2, tint: "emerald" },
+                { size: 100, top: "38%", left: "44%", dx: 50, dy: -80, dur: 16, delay: 0.9, tint: "teal" },
+                { size: 82, top: "28%", left: "18%", dx: 45, dy: 85, dur: 15, delay: 0.3, tint: "cyan" },
+                { size: 135, top: "50%", left: "58%", dx: -45, dy: -65, dur: 21, delay: 1.7, tint: "emerald" },
+                { size: 68, top: "12%", left: "48%", dx: 35, dy: 55, dur: 13, delay: 2.5, tint: "teal" },
+                { size: 92, top: "68%", left: "32%", dx: -40, dy: 50, dur: 17, delay: 1.4, tint: "cyan" },
+                { size: 58, top: "22%", left: "88%", dx: -30, dy: 40, dur: 12, delay: 0.5, tint: "emerald" },
+                { size: 74, top: "86%", left: "68%", dx: 35, dy: -45, dur: 14, delay: 2.8, tint: "teal" },
+                { size: 110, top: "46%", left: "8%", dx: 55, dy: -40, dur: 19, delay: 1.1, tint: "cyan" },
+              ].map((s, i) => {
+                const tintStyles =
+                  s.tint === "emerald"
+                    ? {
+                        fill: "from-white/55 via-emerald-200/35 to-emerald-400/25",
+                        rim: "border-emerald-300/70",
+                        glow: "rgba(16,185,129,0.35)",
+                        inner: "from-emerald-300/30",
+                      }
+                    : s.tint === "teal"
+                    ? {
+                        fill: "from-white/55 via-teal-200/35 to-teal-400/25",
+                        rim: "border-teal-300/70",
+                        glow: "rgba(20,184,166,0.35)",
+                        inner: "from-teal-300/30",
+                      }
+                    : {
+                        fill: "from-white/55 via-cyan-200/35 to-cyan-400/25",
+                        rim: "border-cyan-300/70",
+                        glow: "rgba(34,211,238,0.35)",
+                        inner: "from-cyan-300/30",
+                      };
+
+                return (
+                  <motion.div
+                    key={i}
+                    className="absolute"
+                    style={{ width: s.size, height: s.size, top: s.top, left: s.left }}
+                    animate={{
+                      x: [0, s.dx, -s.dx * 0.35, 0],
+                      y: [0, s.dy, -s.dy * 0.25, 0],
+                      scale: [1, 1.08, 0.97, 1],
+                      rotate: [0, 6, -4, 0],
+                    }}
+                    transition={{
+                      duration: s.dur,
+                      delay: s.delay,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                  >
+                    <div
+                      className={`relative w-full h-full rounded-full border-[2.5px] ${tintStyles.rim} bg-gradient-to-br ${tintStyles.fill} backdrop-blur-[1px]`}
+                      style={{
+                        boxShadow: `inset 0 -10px 24px ${tintStyles.glow}, inset 0 12px 20px rgba(255,255,255,0.65), 0 10px 28px ${tintStyles.glow}`,
+                      }}
+                    >
+                      <div className="absolute top-[10%] left-[16%] w-[32%] h-[24%] rounded-full bg-white/80 blur-[0.5px]" />
+                      <div className="absolute top-[22%] right-[20%] w-[14%] h-[10%] rounded-full bg-white/45" />
+                      <div className={`absolute bottom-[10%] left-[14%] right-[14%] h-[38%] rounded-[50%] bg-gradient-to-t ${tintStyles.inner} to-transparent opacity-80`} />
+                      <div className="absolute inset-[3px] rounded-full border border-white/35" />
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
 
             <div className="relative z-10 max-w-md w-full space-y-8 bg-white/95 backdrop-blur-sm p-8 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 text-center overflow-hidden">
@@ -2357,40 +2483,32 @@ ____________________                    _____________________                   
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right border-collapse table-auto min-w-full">
+                <div className="overflow-hidden">
+                  <table className="w-full text-right border-collapse table-fixed">
                     <thead>
-                      <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-xs font-bold tracking-wider">
-                        <th className="p-2 text-center min-w-[130px] bg-slate-200/50 text-slate-900 font-extrabold">
-                          סטטוס וחוזים
-                        </th>
-                        <th className="p-2 text-right hidden lg:table-cell min-w-[72px]">התמחות</th>
-                        <th className="p-2 text-center min-w-[36px]">שנה</th>
-                        <th className="p-2 text-right min-w-[88px]">שם המורה</th>
-                        <th className="p-2 text-right hidden md:table-cell min-w-[80px]">שם המקצוע</th>
-                        <th className="p-2 text-right text-xs leading-tight hidden lg:table-cell min-w-[118px] whitespace-nowrap">מחצית / מחזור</th>
-                        <th className="p-2 text-center hidden lg:table-cell min-w-[92px]">צורת תשלום</th>
-                        <th className="p-2 text-center min-w-[40px]">ש"ש</th>
-                        <th className="p-2 text-center min-w-[72px] hidden md:table-cell">חודשים / מפגשים</th>
-                        <th className="p-2 text-center min-w-[64px] bg-amber-50/20 text-amber-900 font-bold">
-                          שעות שנתיות
-                        </th>
-                        <th className="p-2 text-center min-w-[64px] hidden lg:table-cell">תעריף לשעה</th>
-                        <th className="p-2 text-center min-w-[72px] bg-emerald-50/30 hidden xl:table-cell">
-                          עלות מעביד לשעה
-                        </th>
-                        <th className="p-2 text-center min-w-[72px] bg-emerald-50/50 text-emerald-900 font-extrabold">
-                          סה"כ שנתי
-                        </th>
-                        <th className="p-2 text-center text-xs leading-tight hidden lg:table-cell min-w-[100px] whitespace-nowrap">נסיעות</th>
-                        <th className="p-2 text-center text-xs leading-tight hidden lg:table-cell min-w-[128px] whitespace-nowrap">מועד נתינת ציון</th>
-                        <th className="p-2 text-center min-w-[88px] hidden xl:table-cell">ת.ז מורה</th>
-                        <th className="p-2 text-center min-w-[96px] hidden lg:table-cell">טלפון מורה *</th>
-                        <th className="p-2 text-center min-w-[120px] hidden xl:table-cell">אימייל מורה *</th>
-                        <th className="p-2 text-center min-w-[88px] bg-slate-100/50">פעולות</th>
+                      <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-[10px] font-bold tracking-wide">
+                        <th className="p-1.5 text-center w-[10%] bg-slate-200/50 text-slate-900 font-extrabold leading-tight">סטטוס וחוזים</th>
+                        <th className="p-1.5 w-[5%] text-right hidden lg:table-cell leading-tight">התמחות</th>
+                        <th className="p-1.5 w-[3%] text-center leading-tight">שנה</th>
+                        <th className="p-1.5 w-[8%] text-right leading-tight">שם המורה</th>
+                        <th className="p-1.5 w-[7%] text-right hidden md:table-cell leading-tight">שם המקצוע</th>
+                        <th className="p-1.5 w-[7%] text-right leading-tight hidden lg:table-cell">מחצית / מחזור</th>
+                        <th className="p-1.5 w-[7%] text-center hidden lg:table-cell leading-tight">צורת תשלום</th>
+                        <th className="p-1.5 text-center w-[3%] leading-tight">ש"ש</th>
+                        <th className="p-1.5 text-center w-[5%] hidden md:table-cell leading-tight">חודשים / מפגשים</th>
+                        <th className="p-1.5 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold leading-tight">שעות שנתיות</th>
+                        <th className="p-1.5 text-center w-[5%] hidden lg:table-cell leading-tight">תעריף לשעה</th>
+                        <th className="p-1.5 text-center w-[5%] bg-emerald-50/30 hidden xl:table-cell leading-tight">עלות מעביד לשעה</th>
+                        <th className="p-1.5 text-center w-[6%] bg-emerald-50/50 text-emerald-900 font-extrabold leading-tight">סה"כ שנתי</th>
+                        <th className="p-1.5 w-[5%] text-center leading-tight hidden lg:table-cell">נסיעות</th>
+                        <th className="p-1.5 w-[7%] text-center leading-tight hidden lg:table-cell">מועד נתינת ציון</th>
+                        <th className="p-1.5 text-center w-[5%] hidden xl:table-cell leading-tight">ת.ז מורה</th>
+                        <th className="p-1.5 text-center w-[6%] hidden lg:table-cell leading-tight">טלפון מורה *</th>
+                        <th className="p-1.5 text-center w-[7%] hidden xl:table-cell leading-tight">אימייל מורה *</th>
+                        <th className="p-1.5 text-center w-[5%] bg-slate-100/50 leading-tight">פעולות</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-sm">
+                    <tbody className="divide-y divide-slate-100 text-[11px]">
                       {filteredRecords.length === 0 ? (
                         <tr>
                           <td colSpan={19} className="text-center py-12 text-slate-400 font-bold">
@@ -2633,27 +2751,27 @@ ____________________                    _____________________                   
                               }`}
                             >
                               {/* 1. STATUS & CONTRACT column */}
-                              <td className="p-3 align-middle border-b border-slate-100 text-center bg-slate-50/30">
-                                <div className="flex flex-col items-center justify-center gap-1.5">
+                              <td className="p-1.5 align-middle border-b border-slate-100 text-center bg-slate-50/30">
+                                <div className="flex flex-col items-center justify-center gap-1">
                                   {role === "director" ? (
                                     item.id > 0 ? (
                                       item.isApproved ? (
                                         <button
                                           onClick={() => handleToggleApproved(item.id, false)}
-                                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer transition w-36 text-center flex items-center justify-center gap-1"
+                                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] px-2 py-1 rounded-lg shadow-sm cursor-pointer transition w-full max-w-[108px] text-center flex items-center justify-center gap-1 mx-auto"
                                         >
-                                          <UserCheck className="w-3.5 h-3.5" /> מאושר
+                                          <UserCheck className="w-3 h-3" /> מאושר
                                         </button>
                                       ) : (
                                         <button
                                           onClick={() => handleToggleApproved(item.id, true)}
-                                          className="bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-200 font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer transition w-36 text-center flex items-center justify-center gap-1"
+                                          className="bg-orange-100 hover:bg-orange-200 text-orange-800 border border-orange-200 font-bold text-[10px] px-2 py-1 rounded-lg shadow-sm cursor-pointer transition w-full max-w-[108px] text-center flex items-center justify-center gap-1 mx-auto"
                                         >
-                                          <UserX className="w-3.5 h-3.5" /> אשר כעת
+                                          <UserX className="w-3 h-3" /> אשר כעת
                                         </button>
                                       )
                                     ) : (
-                                      <button className="bg-slate-200 text-slate-500 font-bold text-[11px] px-3 py-1.5 rounded-lg border border-slate-300 w-36 text-center cursor-not-allowed">
+                                      <button className="bg-slate-200 text-slate-500 font-bold text-[10px] px-2 py-1 rounded-lg border border-slate-300 w-full max-w-[108px] text-center cursor-not-allowed mx-auto">
                                         טיוטה 🔒
                                       </button>
                                     )
@@ -2664,24 +2782,24 @@ ____________________                    _____________________                   
                                           setActiveContractRecord(item);
                                           setShowContractModal(true);
                                         }}
-                                        className={`font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer transition w-36 text-center flex items-center justify-center gap-1 ${
+                                        className={`font-extrabold text-[10px] px-2 py-1 rounded-lg shadow-sm cursor-pointer transition w-full max-w-[108px] text-center flex items-center justify-center gap-1 mx-auto leading-tight ${
                                           item.isContractReady
                                             ? "bg-violet-200/80 hover:bg-violet-300/80 text-violet-900 border border-violet-300"
                                             : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                                         }`}
                                       >
-                                        <FileSignature className="w-3.5 h-3.5" />
+                                        <FileSignature className="w-3 h-3 shrink-0" />
                                         {item.isContractReady ? "חוזה מוכן 📜" : "הכיני חוזה 📜"}
                                       </button>
                                     ) : (
-                                      <span className="text-xs text-slate-400 font-bold">
+                                      <span className="text-[10px] text-slate-400 font-bold leading-tight">
                                         ממתין לאישור מנהלת
                                       </span>
                                     )
                                   ) : (
                                     /* Coordinator or guest status label */
                                     <span
-                                      className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
+                                      className={`px-2 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1 leading-tight ${
                                         item.isApproved
                                           ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                                           : item.id < 0
@@ -2705,80 +2823,102 @@ ____________________                    _____________________                   
                               </td>
 
                               {/* View-Only Columns */}
-                              <td className="p-3 border-b border-slate-100 font-semibold text-slate-700 align-middle hidden lg:table-cell truncate">
-                                {item.track}
+                              <td className="p-1.5 border-b border-slate-100 font-semibold text-slate-700 align-middle hidden lg:table-cell">
+                                <AutoFitCellText className="font-semibold text-slate-700">{item.track}</AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
-                                {item.year}
+                              <td className="p-1.5 border-b border-slate-100 text-center text-slate-500 font-medium align-middle">
+                                <AutoFitCellText align="center" maxFontSize={10} className="text-slate-500 font-medium">
+                                  {item.year}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 font-bold text-slate-900 truncate align-middle" title={item.teacherName}>
-                                {item.teacherName || "—"}
+                              <td className="p-1.5 border-b border-slate-100 font-bold text-slate-900 align-middle">
+                                <AutoFitCellText className="font-bold text-slate-900">{item.teacherName || "—"}</AutoFitCellText>
                                 {multipleJobsBadge}
                               </td>
-                              <td className="p-3 border-b border-slate-100 font-medium text-slate-800 truncate align-middle hidden md:table-cell" title={item.subject}>
-                                {item.subject || "—"}
+                              <td className="p-1.5 border-b border-slate-100 font-medium text-slate-800 align-middle hidden md:table-cell">
+                                <AutoFitCellText className="font-medium text-slate-800">{item.subject || "—"}</AutoFitCellText>
                               </td>
-                              <td
-                                className="p-2 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
-                              >
-                                {formatSemesterDisplay(item.semester)}
+                              <td className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell">
+                                <AutoFitCellText className="text-slate-600">{formatSemesterDisplay(item.semester)}</AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
+                              <td className="p-1.5 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
-                                  className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold inline-block max-w-full truncate ${getPaymentMethodBadgeClass(item.paymentMethod)}`}
-                                  title={`${item.paymentMethod}${item.paymentMethod === "תקן" ? " (+45%)" : item.paymentMethod === "שכר מרצים" ? " (+30%)" : item.paymentMethod === "קבלה" ? " (+18%)" : " (0%)"}`}
+                                  className={`px-1 py-0.5 rounded-full font-bold inline-block w-full max-w-full ${getPaymentMethodBadgeClass(item.paymentMethod)}`}
                                 >
-                                  {item.paymentMethod}
-                                  {item.paymentMethod === "תקן"
-                                    ? " (+45%)"
-                                    : item.paymentMethod === "שכר מרצים"
-                                    ? " (+30%)"
-                                    : item.paymentMethod === "קבלה"
-                                    ? " (+18%)"
-                                    : " (0%)"}
+                                  <AutoFitCellText
+                                    align="center"
+                                    maxFontSize={9}
+                                    minFontSize={6}
+                                    maxLines={2}
+                                    className="font-bold"
+                                  >
+                                    {item.paymentMethod}
+                                    {item.paymentMethod === "תקן"
+                                      ? " (+45%)"
+                                      : item.paymentMethod === "שכר מרצים"
+                                      ? " (+30%)"
+                                      : item.paymentMethod === "קבלה"
+                                      ? " (+18%)"
+                                      : " (0%)"}
+                                  </AutoFitCellText>
                                 </span>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle">
-                                {item.shash}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle">
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-medium">
+                                  {item.shash}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-medium align-middle hidden md:table-cell">
-                                {item.meetings}{" "}
-                                <span className="text-[10px] text-slate-400 block">
-                                  {item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}
-                                </span>
+                              <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle hidden md:table-cell">
+                                <AutoFitCellText align="center" maxFontSize={10} maxLines={2} className="font-medium">
+                                  {`${item.meetings} ${item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}`}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
-                                {item.totalHours}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-extrabold text-slate-800">
+                                  {item.totalHours}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-semibold align-middle hidden lg:table-cell">
-                                ₪{item.rate}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-semibold align-middle hidden lg:table-cell">
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-semibold">
+                                  {`₪${item.rate}`}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-emerald-50/30 align-middle hidden xl:table-cell">
-                                ₪{item.employerOverhead.toLocaleString()}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-extrabold text-slate-900 bg-emerald-50/30 align-middle hidden xl:table-cell">
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-extrabold text-slate-900">
+                                  {`₪${item.employerOverhead.toLocaleString()}`}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-black text-emerald-700 bg-emerald-50/50 align-middle">
-                                ₪{item.totalAnnual.toLocaleString()}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-black text-emerald-700 bg-emerald-50/50 align-middle">
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-black text-emerald-700">
+                                  {`₪${item.totalAnnual.toLocaleString()}`}
+                                </AutoFitCellText>
                               </td>
-                              <td
-                                className="p-2 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
-                              >
-                                {item.travel || "בית שמש"}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell">
+                                <AutoFitCellText align="center" className="font-medium text-slate-700">
+                                  {item.travel || "בית שמש"}
+                                </AutoFitCellText>
                               </td>
-                              <td
-                                className="p-2 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell text-xs leading-snug whitespace-nowrap"
-                              >
-                                {formatGradeTimingDisplay(item.gradeTiming)}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell">
+                                <AutoFitCellText align="center" className="font-medium text-slate-700">
+                                  {formatGradeTimingDisplay(item.gradeTiming) || "—"}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center font-mono align-middle hidden xl:table-cell truncate">
-                                {item.tz || "—"}
+                              <td className="p-1.5 border-b border-slate-100 text-center font-mono align-middle hidden xl:table-cell">
+                                <AutoFitCellText align="center" maxFontSize={10} minFontSize={6} className="font-mono">
+                                  {item.tz || "—"}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell truncate">
-                                {item.phone || "—"}
+                              <td className="p-1.5 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
+                                <AutoFitCellText align="center" maxFontSize={10} minFontSize={6} className="font-mono">
+                                  {item.phone || "—"}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 truncate align-middle hidden xl:table-cell" title={item.email}>
-                                {item.email || "—"}
+                              <td className="p-1.5 border-b border-slate-100 align-middle hidden xl:table-cell">
+                                <AutoFitCellText maxFontSize={10} minFontSize={6} className="font-mono text-slate-700">
+                                  {item.email || "—"}
+                                </AutoFitCellText>
                               </td>
-                              <td className="p-3 border-b border-slate-100 text-center align-middle bg-slate-50/30">
+                              <td className="p-1.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
                                 <div className="flex items-center justify-center gap-1">
                                   {item.isApproved && role === "coordinator" ? (
                                     <button
