@@ -1591,31 +1591,68 @@ ____________________                    _____________________                   
   const handleToggleContractStatus = async () => {
     if (!activeContractRecord) return;
     const nameLower = activeContractRecord.teacherName.trim().toLowerCase();
-    const isCurrentlyReady = activeContractRecord.isContractReady;
-    const newStatus = !isCurrentlyReady;
+    const newStatus = !activeContractRecord.isContractReady;
 
     const teacherRows = records.filter(
       (r) => r.teacherName && r.teacherName.trim().toLowerCase() === nameLower
     );
+    const updatedRows = teacherRows.map((row) => ({ ...row, isContractReady: newStatus }));
+    const updatedIds = new Set(updatedRows.map((r) => r.id));
+
+    // Optimistic UI update so the row colors immediately
+    setRecords((prev) =>
+      prev.map((r) => (updatedIds.has(r.id) ? { ...r, isContractReady: newStatus } : r))
+    );
+    setActiveContractRecord((prev) => (prev ? { ...prev, isContractReady: newStatus } : prev));
 
     setLoading(true);
     try {
-      for (const row of teacherRows) {
-        const updated = { ...row, isContractReady: newStatus };
-        await fetch("/api/records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updated),
-        });
+      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+      for (const updated of updatedRows) {
+        let saved = false;
+
+        try {
+          const response = await fetch("/api/records", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updated),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            saved = Boolean(data.success);
+          }
+        } catch {}
+
+        if (!saved && sUrl && sKey && updated.id > 0) {
+          try {
+            const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${updated.id}`, {
+              method: "PATCH",
+              headers: {
+                "apikey": sKey,
+                "Authorization": `Bearer ${sKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(mapRecordToDb(updated)),
+            });
+            saved = res.ok;
+          } catch {}
+        }
+
+        if (!saved) {
+          const localData = localStorage.getItem("sz_local_records_v2");
+          let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+          localRows = localRows.map((r) => (r.id === updated.id ? updated : r));
+          localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+        }
       }
-      triggerAlert(
-        `סטטוס החוזה עבור "${activeContractRecord.teacherName}" עודכן בהצלחה לכלל משרותיה!`,
-        "success"
-      );
+
       setShowContractModal(false);
-      fetchRecords();
-    } catch (e) {
+      await fetchRecords();
+    } catch {
       triggerAlert("תקלה בעדכון סטטוס חוזה", "error");
+      await fetchRecords();
     } finally {
       setLoading(false);
     }
@@ -2578,7 +2615,7 @@ ____________________                    _____________________                   
                                 activeEditingId === item.id
                                   ? "bg-emerald-50/60 hover:bg-emerald-50/80 font-semibold"
                                   : item.isContractReady
-                                  ? "bg-teal-50/45 hover:bg-teal-50/70"
+                                  ? "bg-violet-100/80 hover:bg-violet-100"
                                   : item.isApproved
                                   ? "bg-emerald-50/10 hover:bg-emerald-50/20"
                                   : "hover:bg-slate-50"
@@ -2618,12 +2655,12 @@ ____________________                    _____________________                   
                                         }}
                                         className={`font-extrabold text-[11px] px-3 py-1.5 rounded-lg shadow-sm cursor-pointer transition w-36 text-center flex items-center justify-center gap-1 ${
                                           item.isContractReady
-                                            ? "bg-teal-600 hover:bg-teal-700 text-white"
+                                            ? "bg-violet-200/80 hover:bg-violet-300/80 text-violet-900 border border-violet-300"
                                             : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
                                         }`}
                                       >
                                         <FileSignature className="w-3.5 h-3.5" />
-                                        {item.isContractReady ? "הוכן חוזה 📜" : "הכיני חוזה 📜"}
+                                        {item.isContractReady ? "חוזה מוכן 📜" : "הכיני חוזה 📜"}
                                       </button>
                                     ) : (
                                       <span className="text-xs text-slate-400 font-bold">
@@ -3222,7 +3259,7 @@ ____________________                    _____________________                   
                 className={`text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm ${
                   activeContractRecord.isContractReady
                     ? "bg-rose-600 hover:bg-rose-700"
-                    : "bg-teal-600 hover:bg-teal-700"
+                    : "bg-violet-600 hover:bg-violet-700"
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -3304,7 +3341,14 @@ ____________________                    _____________________                   
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {filteredRecords.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50 text-slate-800 transition-colors">
+                    <tr
+                      key={item.id}
+                      className={`text-slate-800 transition-colors ${
+                        item.isContractReady
+                          ? "bg-violet-100/70 print:bg-violet-100"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
                       <td className="border border-slate-200 p-2 font-medium">{item.track}</td>
                       <td className="border border-slate-200 p-2 text-center">{item.year}</td>
                       <td className="border border-slate-200 p-2 font-bold max-w-[200px] truncate">
