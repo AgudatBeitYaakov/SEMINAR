@@ -93,6 +93,17 @@ const formatGradeTimingDisplay = (gradeTiming?: string) => {
   return gradeTiming.replace(/סמסטר/g, "מחצית").replace(" (סדנה/ערב)", "");
 };
 
+const getPaymentMethodBadgeClass = (paymentMethod: string) => {
+  if (paymentMethod === "תקן") {
+    return "bg-violet-50 text-violet-800 border border-violet-200";
+  }
+  if (paymentMethod === "שכר מרצים") {
+    return "bg-emerald-50 text-emerald-800 border border-emerald-200";
+  }
+  // קבלה + קבלת פטור — אותו צבע שלישי
+  return "bg-amber-50 text-amber-800 border border-amber-200";
+};
+
 export default function App() {
   // Authentication & Role State
   const [role, setRole] = useState<UserRole>("guest");
@@ -2712,15 +2723,7 @@ ____________________                    _____________________                   
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${
-                                    item.paymentMethod === "תקן"
-                                      ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
-                                      : item.paymentMethod === "שכר מרצים"
-                                      ? "bg-emerald-50 text-emerald-800 border border-emerald-100"
-                                      : item.paymentMethod === "קבלה"
-                                      ? "bg-amber-50 text-amber-800 border border-amber-100"
-                                      : "bg-blue-50 text-blue-800 border border-blue-100"
-                                  }`}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${getPaymentMethodBadgeClass(item.paymentMethod)}`}
                                 >
                                   {item.paymentMethod}
                                   {item.paymentMethod === "תקן"
