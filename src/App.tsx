@@ -70,6 +70,29 @@ const TRACKS_BUDGET_LIMITS: Record<string, number> = {
 const MONTH_KEYS = ["sep", "oct", "nov", "dec", "jan", "feb", "mar", "apr", "may", "jun", "jul"] as const;
 const MONTH_LABELS = ["ספט'", "אוק'", "נוב'", "דצמ'", "ינו'", "פבר'", "מרץ", "אפר'", "מאי", "יוני", "יולי"];
 
+const SEMESTER_OPTIONS = [
+  "שנתי",
+  "מקצוע במחצית א'",
+  "מקצוע במחצית ב'",
+  "קורס במחצית א'",
+  "קורס במחצית ב'",
+];
+
+const GRADE_TIMING_OPTIONS = [
+  "ציון אחד בסוף שנה",
+  "ציון בכל מחצית",
+  "ציון בסיום קורס",
+  "ללא ציון",
+];
+
+const formatSemesterDisplay = (semester: string) =>
+  (semester || "שנתי").replace(/סמסטר/g, "מחצית");
+
+const formatGradeTimingDisplay = (gradeTiming?: string) => {
+  if (!gradeTiming || gradeTiming.includes("ללא ציון")) return "";
+  return gradeTiming.replace(/סמסטר/g, "מחצית").replace(" (סדנה/ערב)", "");
+};
+
 export default function App() {
   // Authentication & Role State
   const [role, setRole] = useState<UserRole>("guest");
@@ -412,7 +435,7 @@ export default function App() {
     setSimulatingRow(row);
     setSimName(row.teacherName);
     setSimSubject(row.subject);
-    setSimSemester(row.semester);
+    setSimSemester(formatSemesterDisplay(row.semester));
     setSimPaymentMethod(row.paymentMethod);
     setSimShash(row.shash);
     setSimMeetings(row.meetings);
@@ -956,7 +979,7 @@ export default function App() {
     setEditYear(row.year);
     setEditTeacherName(row.teacherName);
     setEditSubject(row.subject);
-    setEditSemester(row.semester);
+    setEditSemester(formatSemesterDisplay(row.semester));
     setEditPaymentMethod(row.paymentMethod);
     setEditShash(row.shash);
     setEditMeetings(row.meetings);
@@ -965,7 +988,11 @@ export default function App() {
     setEditPhone(row.phone);
     setEditEmail(row.email);
     setEditTravel(row.travel || "בית שמש");
-    setEditGradeTiming(row.gradeTiming || "ציון אחד בסוף שנה");
+    setEditGradeTiming(
+      row.gradeTiming?.includes("ללא ציון")
+        ? "ללא ציון"
+        : row.gradeTiming?.replace(/סמסטר/g, "מחצית").replace(" (סדנה/ערב)", "") || "ציון אחד בסוף שנה"
+    );
   };
 
   // Editing an EXISTING row opens the pop-up modal.
@@ -1491,7 +1518,11 @@ export default function App() {
     let hasLecturer = false;
 
     teacherRows.forEach((row) => {
-      const formattedSemester = row.semester.includes("סמסטר א'") ? "סמסטר א'" : row.semester.includes("סמסטר ב'") ? "סמסטר ב'" : "שנתי";
+      const formattedSemester = formatSemesterDisplay(row.semester).includes("מחצית א'")
+        ? "מחצית א'"
+        : formatSemesterDisplay(row.semester).includes("מחצית ב'")
+        ? "מחצית ב'"
+        : "שנתי";
       let rowDetail = "";
       if (row.paymentMethod === "תקן") {
         rowDetail = `(${row.track}) ${row.shash} ש"ש ${row.subject}, כיתה ${row.year} – ${formattedSemester} בתעריף תקן`;
@@ -1651,16 +1682,16 @@ ____________________                    _____________________                   
       return;
     }
 
-    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,סמסטר / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,סטטוס חוזה\n";
+    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,מחצית / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,נסיעות\n";
     let totalHoursSum = 0;
     let totalBudgetSum = 0;
 
     filteredRecords.forEach((item) => {
       const statusStr = item.isApproved ? "מאושר לתשלום" : "ממתין לאישור";
-      const contractStr = item.isContractReady ? "הוכן חוזה 📜" : "הכיני חוזה 📜";
+      const travelStr = item.travel || "בית שמש";
       const methodStr = `${item.paymentMethod} (${item.paymentMethod === "תקן" ? "+45%" : item.paymentMethod === "שכר מרצים" ? "+30%" : item.paymentMethod === "קבלה" ? "+18%" : "0%"})`;
 
-      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${item.semester || ""}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${contractStr}"\n`;
+      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${formatSemesterDisplay(item.semester)}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${travelStr}"\n`;
 
       totalHoursSum += item.totalHours;
       totalBudgetSum += item.totalAnnual;
@@ -1676,6 +1707,35 @@ ____________________                    _____________________                   
     link.click();
     document.body.removeChild(link);
     triggerAlert("הדוח יוצא לאקסל בהצלחה (בפורמט CSV נתמך)!", "success");
+  };
+
+  const handleExportExecutionToExcel = () => {
+    const lecturerRows = records.filter((r) => r.paymentMethod === "שכר מרצים");
+    if (lecturerRows.length === 0) {
+      triggerAlert("אין מורות בשכר מרצים לייצוא דיווח ביצוע!", "info");
+      return;
+    }
+
+    let csv = `\uFEFFשם המורה,שם המקצוע,התמחות,שעות שהוקצו,תעריף,${MONTH_LABELS.join(",")},שעות שבוצעו,יתרת שעות\n`;
+
+    lecturerRows.forEach((item) => {
+      const monthly = item.monthlyHours || {};
+      const monthValues = MONTH_KEYS.map((m) => parseFloat(String(monthly[m] || 0)) || 0);
+      const totalDone = monthValues.reduce((sum, val) => sum + val, 0);
+      const allocated = item.totalHours || 0;
+      const remaining = allocated - totalDone;
+
+      csv += `"${item.teacherName || ""}","${item.subject || ""}","${item.track || ""}",${allocated},${item.rate},${monthValues.join(",")},${totalDone},${remaining}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "דיווח_ביצוע_חודשי_שכר_מרצים_תשפז.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    triggerAlert("דוח הביצוע החודשי יוצא לאקסל בהצלחה!", "success");
   };
 
   // Live calculation updater for active editing row
@@ -2260,7 +2320,7 @@ ____________________                    _____________________                   
                         <th className="p-3 w-[4%] text-center">שנה</th>
                         <th className="p-3 w-[10%] text-right">שם המורה</th>
                         <th className="p-3 w-[10%] text-right hidden md:table-cell">שם המקצוע</th>
-                        <th className="p-3 w-[8%] text-right hidden xl:table-cell">סמסטר / מחזור</th>
+                        <th className="p-3 w-[8%] text-right hidden xl:table-cell">מחצית / מחזור</th>
                         <th className="p-3 w-[8%] text-center hidden lg:table-cell">צורת תשלום</th>
                         <th className="p-3 text-center w-[4%]">ש"ש</th>
                         <th className="p-3 text-center w-[5%] hidden md:table-cell">חודשים / מפגשים</th>
@@ -2353,17 +2413,15 @@ ____________________                    _____________________                   
                                       </select>
                                     </div>
                                     <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">סמסטר / מחזור</label>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">מחצית / מחזור</label>
                                       <select
                                         value={editSemester}
                                         onChange={(e) => setEditSemester(e.target.value)}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-600 bg-white"
                                       >
-                                        <option value="שנתי">שנתי</option>
-                                        <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
-                                        <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
-                                        <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
-                                        <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
+                                        {SEMESTER_OPTIONS.map((opt) => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
                                       </select>
                                     </div>
                                     <div>
@@ -2463,9 +2521,9 @@ ____________________                    _____________________                   
                                         onChange={(e) => setEditGradeTiming(e.target.value)}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-600 bg-white"
                                       >
-                                        <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
-                                        <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
-                                        <option value="ללא ציון (סדנה/ערב)">ללא ציון (סדנה/ערב)</option>
+                                        {GRADE_TIMING_OPTIONS.map((opt) => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
                                       </select>
                                     </div>
                                   </div>
@@ -2613,7 +2671,7 @@ ____________________                    _____________________                   
                                 {item.subject || "—"}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-slate-600 align-middle hidden xl:table-cell truncate">
-                                {item.semester || "שנתי"}
+                                {formatSemesterDisplay(item.semester)}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
@@ -2662,7 +2720,7 @@ ____________________                    _____________________                   
                                 {item.travel || "בית שמש"}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden 2xl:table-cell truncate">
-                                {item.gradeTiming && !item.gradeTiming.includes("ללא ציון") ? item.gradeTiming : ""}
+                                {formatGradeTimingDisplay(item.gradeTiming)}
                               </td>
                               <td className="p-3 border-b border-slate-100 text-center font-mono align-middle hidden xl:table-cell truncate">
                                 {item.tz || "—"}
@@ -2910,12 +2968,21 @@ ____________________                    _____________________                   
                       המזכירה האחראית עוקבת ומעדכנת כאן שעות ביצוע מדווחות בפועל מול שעות שהוקצו לכל מורה.
                     </p>
                   </div>
-                  <button
-                    onClick={toggleExecutionView}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    חזרה לניהול תקציב וחוזים
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleExportExecutionToExcel}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      ייצוא לאקסל
+                    </button>
+                    <button
+                      onClick={toggleExecutionView}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      חזרה לניהול תקציב וחוזים
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto custom-scrollbar mt-6">
                   <table className="w-full text-right border-collapse text-xs">
@@ -3217,7 +3284,7 @@ ____________________                    _____________________                   
                     <th className="border border-slate-200 p-2 text-center">שנה</th>
                     <th className="border border-slate-200 p-2 text-right">שם המורה</th>
                     <th className="border border-slate-200 p-2 text-right">שם המקצוע</th>
-                    <th className="border border-slate-200 p-2 text-right">סמסטר / מחזור</th>
+                    <th className="border border-slate-200 p-2 text-right">מחצית / מחזור</th>
                     <th className="border border-slate-200 p-2 text-center">צורת תשלום</th>
                     <th className="border border-slate-200 p-2 text-center">ש"ש</th>
                     <th className="border border-slate-200 p-2 text-center">מפגשים/חודשים</th>
@@ -3232,7 +3299,7 @@ ____________________                    _____________________                   
                       סה"כ שנתי שכר
                     </th>
                     <th className="border border-slate-200 p-2 text-center">סטטוס אישור</th>
-                    <th className="border border-slate-200 p-2 text-center">סטטוס חוזה</th>
+                    <th className="border border-slate-200 p-2 text-center">נסיעות</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -3247,7 +3314,7 @@ ____________________                    _____________________                   
                         {item.subject}
                       </td>
                       <td className="border border-slate-200 p-2 text-right text-slate-500">
-                        {item.semester}
+                        {formatSemesterDisplay(item.semester)}
                       </td>
                       <td className="border border-slate-200 p-2 text-center font-medium">
                         {item.paymentMethod}
@@ -3277,14 +3344,8 @@ ____________________                    _____________________                   
                       >
                         {item.isApproved ? "מאושר" : "ממתין"}
                       </td>
-                      <td
-                        className={`border border-slate-200 p-2 text-center font-medium text-[10px] ${
-                          item.isContractReady
-                            ? "text-teal-700 bg-teal-50/50"
-                            : "text-slate-500 bg-slate-50/50"
-                        }`}
-                      >
-                        {item.isContractReady ? "הוכן חוזה 📜" : "הכיני חוזה 📜"}
+                      <td className="border border-slate-200 p-2 text-center font-medium text-[10px] text-slate-700 bg-slate-50/50">
+                        {item.travel || "בית שמש"}
                       </td>
                     </tr>
                   ))}
@@ -3466,17 +3527,15 @@ ____________________                    _____________________                   
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">סמסטר / מחזור</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">מחצית / מחזור</label>
                     <select
                       value={editSemester}
                       onChange={(e) => setEditSemester(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                     >
-                      <option value="שנתי">שנתי</option>
-                      <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
-                      <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
-                      <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
-                      <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
+                      {SEMESTER_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -3563,9 +3622,9 @@ ____________________                    _____________________                   
                       onChange={(e) => setEditGradeTiming(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white font-medium"
                     >
-                      <option value="ציון אחד בסוף שנה">ציון אחד בסוף שנה</option>
-                      <option value="ציון בכל סמסטר">ציון בכל סמסטר</option>
-                      <option value="ללא ציון (סדנה/ערב)">ללא ציון (סדנה/ערב)</option>
+                      {GRADE_TIMING_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -3667,13 +3726,11 @@ ____________________                    _____________________                   
                   <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">סמסטר / מחזור</label>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">מחצית / מחזור</label>
                   <select value={simSemester} onChange={(e) => setSimSemester(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500">
-                    <option value="שנתי">שנתי</option>
-                    <option value="מקצוע בסמסטר א'">מקצוע בסמסטר א'</option>
-                    <option value="מקצוע בסמסטר ב'">מקצוע בסמסטר ב'</option>
-                    <option value="קורס בסמסטר א'">קורס בסמסטר א'</option>
-                    <option value="קורס בסמסטר ב'">קורס בסמסטר ב'</option>
+                    {SEMESTER_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -3774,7 +3831,7 @@ ____________________                    _____________________                   
                         <div className="bg-emerald-50/20 p-3 rounded-xl border border-emerald-100/50">
                           <span className="font-bold text-emerald-500 block mb-1">שינוי מוצע מבוקש</span>
                           <p>מורה: <strong>{req.proposed.teacherName}</strong></p>
-                          <p>מקצוע: {req.proposed.subject} ({req.proposed.semester})</p>
+                          <p>מקצוע: {req.proposed.subject} ({formatSemesterDisplay(req.proposed.semester)})</p>
                           <p>עלות מוצעת: <strong className="text-emerald-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
                         </div>
                       </div>
