@@ -1897,76 +1897,34 @@ ____________________                    _____________________                   
             exit={{ opacity: 0, y: -15 }}
             className="relative overflow-hidden flex-grow flex flex-col justify-center items-center bg-gradient-to-br from-emerald-100 via-teal-50 to-cyan-100 py-12 px-4 sm:px-6 lg:px-8"
           >
-            {/* Floating transparent water balloons drifting across the login screen */}
+            {/* Soft blurred water balloons rising gently from the bottom of the login screen */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
               {[
-                { size: 200, top: "4%", left: "-4%", dx: 80, dy: 100, dur: 18, delay: 0, tint: "emerald" },
-                { size: 155, top: "62%", left: "84%", dx: -70, dy: -90, dur: 22, delay: 1.2, tint: "teal" },
-                { size: 125, top: "78%", left: "6%", dx: 60, dy: -75, dur: 20, delay: 0.6, tint: "cyan" },
-                { size: 175, top: "14%", left: "76%", dx: -55, dy: 95, dur: 24, delay: 2, tint: "emerald" },
-                { size: 100, top: "38%", left: "44%", dx: 50, dy: -80, dur: 16, delay: 0.9, tint: "teal" },
-                { size: 82, top: "28%", left: "18%", dx: 45, dy: 85, dur: 15, delay: 0.3, tint: "cyan" },
-                { size: 135, top: "50%", left: "58%", dx: -45, dy: -65, dur: 21, delay: 1.7, tint: "emerald" },
-                { size: 68, top: "12%", left: "48%", dx: 35, dy: 55, dur: 13, delay: 2.5, tint: "teal" },
-                { size: 92, top: "68%", left: "32%", dx: -40, dy: 50, dur: 17, delay: 1.4, tint: "cyan" },
-                { size: 58, top: "22%", left: "88%", dx: -30, dy: 40, dur: 12, delay: 0.5, tint: "emerald" },
-                { size: 74, top: "86%", left: "68%", dx: 35, dy: -45, dur: 14, delay: 2.8, tint: "teal" },
-                { size: 110, top: "46%", left: "8%", dx: 55, dy: -40, dur: 19, delay: 1.1, tint: "cyan" },
-              ].map((s, i) => {
-                const tintStyles =
-                  s.tint === "emerald"
-                    ? {
-                        fill: "from-white/55 via-emerald-200/35 to-emerald-400/25",
-                        rim: "border-emerald-300/70",
-                        glow: "rgba(16,185,129,0.35)",
-                        inner: "from-emerald-300/30",
-                      }
-                    : s.tint === "teal"
-                    ? {
-                        fill: "from-white/55 via-teal-200/35 to-teal-400/25",
-                        rim: "border-teal-300/70",
-                        glow: "rgba(20,184,166,0.35)",
-                        inner: "from-teal-300/30",
-                      }
-                    : {
-                        fill: "from-white/55 via-cyan-200/35 to-cyan-400/25",
-                        rim: "border-cyan-300/70",
-                        glow: "rgba(34,211,238,0.35)",
-                        inner: "from-cyan-300/30",
-                      };
-
-                return (
-                  <motion.div
-                    key={i}
-                    className="absolute"
-                    style={{ width: s.size, height: s.size, top: s.top, left: s.left }}
-                    animate={{
-                      x: [0, s.dx, -s.dx * 0.35, 0],
-                      y: [0, s.dy, -s.dy * 0.25, 0],
-                      scale: [1, 1.08, 0.97, 1],
-                      rotate: [0, 6, -4, 0],
-                    }}
-                    transition={{
-                      duration: s.dur,
-                      delay: s.delay,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  >
-                    <div
-                      className={`relative w-full h-full rounded-full border-[2.5px] ${tintStyles.rim} bg-gradient-to-br ${tintStyles.fill} backdrop-blur-[1px]`}
-                      style={{
-                        boxShadow: `inset 0 -10px 24px ${tintStyles.glow}, inset 0 12px 20px rgba(255,255,255,0.65), 0 10px 28px ${tintStyles.glow}`,
-                      }}
-                    >
-                      <div className="absolute top-[10%] left-[16%] w-[32%] h-[24%] rounded-full bg-white/80 blur-[0.5px]" />
-                      <div className="absolute top-[22%] right-[20%] w-[14%] h-[10%] rounded-full bg-white/45" />
-                      <div className={`absolute bottom-[10%] left-[14%] right-[14%] h-[38%] rounded-[50%] bg-gradient-to-t ${tintStyles.inner} to-transparent opacity-80`} />
-                      <div className="absolute inset-[3px] rounded-full border border-white/35" />
-                    </div>
-                  </motion.div>
-                );
-              })}
+                { size: 190, from: "from-emerald-300/40", to: "to-teal-400/30", left: "-6%", dx: 40, rise: -220, dur: 22, delay: 0, blur: "blur-xl" },
+                { size: 140, from: "from-teal-300/40", to: "to-cyan-400/30", left: "82%", dx: -35, rise: -200, dur: 26, delay: 1.5, blur: "blur-xl" },
+                { size: 110, from: "from-cyan-300/40", to: "to-emerald-400/30", left: "8%", dx: 30, rise: -180, dur: 24, delay: 0.8, blur: "blur-lg" },
+                { size: 160, from: "from-emerald-200/40", to: "to-teal-300/30", left: "74%", dx: -25, rise: -240, dur: 28, delay: 2.2, blur: "blur-xl" },
+                { size: 90, from: "from-teal-200/45", to: "to-cyan-300/30", left: "42%", dx: 20, rise: -160, dur: 20, delay: 1.1, blur: "blur-lg" },
+                { size: 70, from: "from-emerald-300/45", to: "to-cyan-200/30", left: "20%", dx: 25, rise: -150, dur: 18, delay: 0.4, blur: "blur-md" },
+                { size: 120, from: "from-cyan-200/40", to: "to-teal-300/30", left: "60%", dx: -20, rise: -190, dur: 25, delay: 1.9, blur: "blur-lg" },
+              ].map((s, i) => (
+                <motion.div
+                  key={i}
+                  className={`absolute rounded-full bg-gradient-to-br ${s.from} ${s.to} ${s.blur} shadow-inner opacity-60`}
+                  style={{ width: s.size, height: s.size, bottom: "-8%", left: s.left }}
+                  animate={{
+                    x: [0, s.dx, -s.dx * 0.4, 0],
+                    y: [0, s.rise, s.rise * 0.55, 0],
+                    scale: [1, 1.08, 0.96, 1],
+                  }}
+                  transition={{
+                    duration: s.dur,
+                    delay: s.delay,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                />
+              ))}
             </div>
 
             <div className="relative z-10 max-w-md w-full space-y-8 bg-white/95 backdrop-blur-sm p-8 rounded-2xl shadow-lg shadow-slate-200/60 border border-slate-200 text-center overflow-hidden">
