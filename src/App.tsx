@@ -93,6 +93,17 @@ const formatGradeTimingDisplay = (gradeTiming?: string) => {
   return gradeTiming.replace(/סמסטר/g, "מחצית").replace(" (סדנה/ערב)", "");
 };
 
+/** מנרמל שם מסלול להשוואה יציבה (מרכאות/רווחים שונים) */
+const normalizeTrack = (track: string) =>
+  (track || "")
+    .trim()
+    .replace(/[״"''׳]/g, '"')
+    .replace(/\s+/g, " ");
+
+/** דיווח ביצוע חודשי: כל צורות התשלום מלבד תקן */
+const isExecutionEligible = (paymentMethod: string) =>
+  paymentMethod !== "תקן";
+
 const getPaymentMethodBadgeClass = (paymentMethod: string) => {
   if (paymentMethod === "תקן") {
     return "bg-violet-50 text-violet-800 border border-violet-200";
@@ -548,6 +559,46 @@ export default function App() {
     const req = changeRequests.find((r) => r.requestId === requestId);
     if (!req) return;
 
+    const isDeleteRequest = req.requestType === "delete";
+
+    if (isDeleteRequest) {
+      // מחיקת המשרה והתקציב שלה לאחר אישור מזכירה/מנהלת
+      const rowId = req.rowId;
+      setRecords((prev) => prev.filter((r) => r.id !== rowId));
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/records/${rowId}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("Delete failed");
+      } catch {
+        const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+        const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        let deleted = false;
+        if (sUrl && sKey && rowId > 0) {
+          try {
+            const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${rowId}`, {
+              method: "DELETE",
+              headers: { apikey: sKey, Authorization: `Bearer ${sKey}` },
+            });
+            deleted = res.ok;
+          } catch {}
+        }
+        if (!deleted) {
+          const localData = localStorage.getItem("sz_local_records_v2");
+          let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+          localRows = localRows.filter((r) => r.id !== rowId);
+          localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+        }
+      } finally {
+        setLoading(false);
+      }
+
+      await removeChangeRequest(requestId);
+      await fetchRecords();
+      await fetchChangeRequests();
+      setShowRequestsQueueModal(false);
+      return;
+    }
+
     const rowIdx = records.findIndex((r) => r.id === req.rowId);
     if (rowIdx !== -1) {
       const updatedRow: SalaryRecord = {
@@ -616,16 +667,21 @@ export default function App() {
   const rejectChangeRequest = (requestId: number) => {
     const req = changeRequests.find((r) => r.requestId === requestId);
     if (!req) return;
+    const isDelete = req.requestType === "delete";
     triggerConfirm(
-      `האם את בטוחה שברצונך להסיר את בקשת השינוי של משרת המורה "${req.current.teacherName}"?`,
+      isDelete
+        ? `האם את בטוחה שברצונך לדחות את בקשת המחיקה של משרת המורה "${req.current.teacherName}"?`
+        : `האם את בטוחה שברצונך להסיר את בקשת השינוי של משרת המורה "${req.current.teacherName}"?`,
       async () => {
         await removeChangeRequest(requestId);
         await fetchChangeRequests();
         setShowRequestsQueueModal(false);
         triggerAlert(
-          "הבקשה הוסרה מרשימת ההמתנה. מומלץ לשלוח הודעה לרכזת על סיבת הדחייה.",
+          isDelete
+            ? "בקשת המחיקה הוסרה. המשרה נשארת במערכת."
+            : "הבקשה הוסרה מרשימת ההמתנה. מומלץ לשלוח הודעה לרכזת על סיבת הדחייה.",
           "info",
-          "בקשה הוסרה"
+          isDelete ? "בקשת מחיקה נדחתה" : "בקשה הוסרה"
         );
       }
     );
@@ -994,6 +1050,7 @@ export default function App() {
       requestId: Date.now(),
       rowId: simulatingRow.id,
       track: simulatingRow.track,
+      requestType: "change",
       current: {
         teacherName: simulatingRow.teacherName,
         subject: simulatingRow.subject,
@@ -1025,6 +1082,52 @@ export default function App() {
     await fetchChangeRequests();
     triggerAlert("בקשת השינוי והעדכון נשלחה בהצלחה אל המזכירה האחראית לבחינה ואישור! 📤", "success");
     closeSimulatorModal();
+  };
+
+  const submitDeleteJobRequest = (row: SalaryRecord) => {
+    if (row.id <= 0) {
+      triggerAlert("לא ניתן לשלוח בקשת מחיקה לשורה שעדיין לא נשמרה.", "error");
+      return;
+    }
+
+    const alreadyPending = changeRequests.some(
+      (r) => r.rowId === row.id && r.requestType === "delete"
+    );
+    if (alreadyPending) {
+      triggerAlert("כבר קיימת בקשת מחיקה ממתינה למשרה זו.", "info");
+      return;
+    }
+
+    triggerConfirm(
+      `האם לשלוח בקשת מחיקה למשרת "${row.teacherName || "—"}" (${row.subject || "—"})?\nהמשרה והתקציב יימחקו רק לאחר אישור מזכירה או מנהלת.`,
+      async () => {
+        const snapshot = {
+          teacherName: row.teacherName,
+          subject: row.subject,
+          semester: row.semester,
+          paymentMethod: row.paymentMethod,
+          shash: row.shash,
+          meetings: row.meetings,
+          rate: row.rate,
+          totalHours: row.totalHours,
+          employerOverhead: row.employerOverhead,
+          totalAnnual: row.totalAnnual,
+          travel: row.travel,
+        };
+        const request: ChangeRequest = {
+          requestId: Date.now(),
+          rowId: row.id,
+          track: row.track,
+          requestType: "delete",
+          current: snapshot,
+          proposed: snapshot,
+          timestamp: new Date().toLocaleString("he-IL"),
+        };
+        await persistChangeRequest(request);
+        await fetchChangeRequests();
+        triggerAlert("בקשת מחיקת המשרה נשלחה לאישור מזכירה / מנהלת.", "success");
+      }
+    );
   };
 
   // Add empty row
@@ -1500,13 +1603,14 @@ export default function App() {
 
   // Filter application
   const filteredRecords = useMemo(() => {
+    const selectedTrack = normalizeTrack(filterTrack);
     return records.filter((item) => {
       // If coordinator, enforce their track filter
-      if (role === "coordinator" && activeTrack && item.track !== activeTrack) {
+      if (role === "coordinator" && activeTrack && normalizeTrack(item.track) !== normalizeTrack(activeTrack)) {
         return false;
       }
-      
-      if (filterTrack !== "all" && item.track !== filterTrack) return false;
+
+      if (filterTrack !== "all" && normalizeTrack(item.track) !== selectedTrack) return false;
       if (filterJobType !== "all" && item.paymentMethod !== filterJobType) return false;
       if (filterYear !== "all" && item.year !== filterYear) return false;
 
@@ -1526,6 +1630,13 @@ export default function App() {
       return true;
     });
   }, [records, role, activeTrack, filterTrack, filterJobType, filterYear, filterStatus, searchQuery]);
+
+  /** כל המסלולים לסינון — כולל מסלולים קיימים בנתונים גם אם אינם ברשימה הקבועה */
+  const trackFilterOptions = useMemo(() => {
+    const fromData = records.map((r) => r.track).filter(Boolean);
+    const merged = Array.from(new Set([...ALL_TRACKS, ...fromData]));
+    return merged.sort((a, b) => a.localeCompare(b, "he"));
+  }, [records]);
 
   // General Totals Metric
   const metrics = useMemo(() => {
@@ -1842,28 +1953,28 @@ ____________________                    _____________________                   
   };
 
   const handleExportExecutionToExcel = () => {
-    const lecturerRows = records.filter((r) => r.paymentMethod === "שכר מרצים");
-    if (lecturerRows.length === 0) {
-      triggerAlert("אין מורות בשכר מרצים לייצוא דיווח ביצוע!", "info");
+    const executionRows = records.filter((r) => isExecutionEligible(r.paymentMethod));
+    if (executionRows.length === 0) {
+      triggerAlert("אין מורות לדיווח ביצוע (שכר מרצים / קבלה) לייצוא!", "info");
       return;
     }
 
-    let csv = `\uFEFFשם המורה,שם המקצוע,התמחות,שעות שהוקצו,תעריף,${MONTH_LABELS.join(",")},שעות שבוצעו,יתרת שעות\n`;
+    let csv = `\uFEFFשם המורה,שם המקצוע,התמחות,צורת תשלום,שעות שהוקצו,תעריף,${MONTH_LABELS.join(",")},שעות שבוצעו,יתרת שעות\n`;
 
-    lecturerRows.forEach((item) => {
+    executionRows.forEach((item) => {
       const monthly = item.monthlyHours || {};
       const monthValues = MONTH_KEYS.map((m) => parseFloat(String(monthly[m] || 0)) || 0);
       const totalDone = monthValues.reduce((sum, val) => sum + val, 0);
       const allocated = item.totalHours || 0;
       const remaining = allocated - totalDone;
 
-      csv += `"${item.teacherName || ""}","${item.subject || ""}","${item.track || ""}",${allocated},${item.rate},${monthValues.join(",")},${totalDone},${remaining}\n`;
+      csv += `"${item.teacherName || ""}","${item.subject || ""}","${item.track || ""}","${item.paymentMethod || ""}",${allocated},${item.rate},${monthValues.join(",")},${totalDone},${remaining}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", "דיווח_ביצוע_חודשי_שכר_מרצים_תשפז.csv");
+    link.setAttribute("download", "דיווח_ביצוע_חודשי_תשפז.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2097,7 +2208,7 @@ ____________________                    _____________________                   
                             className="text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 font-extrabold px-2.5 py-1 rounded border border-rose-200 transition-all shadow-sm cursor-pointer flex items-center gap-1"
                           >
                             <Inbox className="w-3 h-3" />
-                            בקשות שינוי ממתינות
+                            בקשות ממתינות
                             {changeRequests.length > 0 && (
                               <span className="bg-rose-600 text-white rounded-full px-1.5 text-[9px] font-black">
                                 {changeRequests.length}
@@ -2268,23 +2379,27 @@ ____________________                    _____________________                   
 
               {/* Filters Block */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6 no-print">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4">
                   {/* Filters fields */}
-                  <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                  <div className="flex flex-wrap items-end gap-2.5 w-full lg:w-auto">
                     {/* Search Field */}
                     <div className="relative min-w-[180px] flex-grow sm:flex-none">
-                      <Search className="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="חיפוש מורה, מקצוע, ת.ז..."
-                        className="w-full pr-8 pl-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all text-slate-700 h-9"
-                      />
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">חיפוש</label>
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="מורה, מקצוע, ת.ז..."
+                          className="w-full pr-8 pl-3 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all text-slate-700 h-9"
+                        />
+                      </div>
                     </div>
 
                     {/* Track filter */}
-                    <div className="min-w-[130px] flex-grow sm:flex-none">
+                    <div className="min-w-[140px] flex-grow sm:flex-none">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">התמחות / מסלול</label>
                       <select
                         value={filterTrack}
                         disabled={role === "coordinator"}
@@ -2294,7 +2409,7 @@ ____________________                    _____________________                   
                         }`}
                       >
                         <option value="all">כל ההתמחויות</option>
-                        {ALL_TRACKS.map((t) => (
+                        {trackFilterOptions.map((t) => (
                           <option key={t} value={t}>
                             {t}
                           </option>
@@ -2304,6 +2419,7 @@ ____________________                    _____________________                   
 
                     {/* Job type filter */}
                     <div className="min-w-[130px] flex-grow sm:flex-none">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">צורת תשלום</label>
                       <select
                         value={filterJobType}
                         onChange={(e) => setFilterJobType(e.target.value)}
@@ -2319,6 +2435,7 @@ ____________________                    _____________________                   
 
                     {/* Year filter */}
                     <div className="min-w-[100px] flex-grow sm:flex-none">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שנה</label>
                       <select
                         value={filterYear}
                         onChange={(e) => setFilterYear(e.target.value)}
@@ -2333,6 +2450,7 @@ ____________________                    _____________________                   
 
                     {/* Status filter */}
                     <div className="min-w-[120px] flex-grow sm:flex-none">
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">סטטוס</label>
                       <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
@@ -2382,13 +2500,14 @@ ____________________                    _____________________                   
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-8">
                   <div className="flex items-center gap-2 mb-4">
                     <Send className="w-5 h-5 text-sky-600" />
-                    <h3 className="font-bold text-slate-900">מעקב בקשות שינוי ששלחת 📤</h3>
+                    <h3 className="font-bold text-slate-900">מעקב בקשות ששלחת 📤</h3>
                   </div>
                   <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-right text-xs">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
                           <th className="p-2">תאריך</th>
+                          <th className="p-2">סוג בקשה</th>
                           <th className="p-2">מורה</th>
                           <th className="p-2">מקצוע</th>
                           <th className="p-2">תעריף שנתי נוכחי</th>
@@ -2399,20 +2518,26 @@ ____________________                    _____________________                   
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {coordinatorSentRequests.map((req) => {
+                          const isDelete = req.requestType === "delete";
                           const diff = req.proposed.totalAnnual - req.current.totalAnnual;
                           return (
                             <tr key={req.requestId} className="hover:bg-slate-50">
                               <td className="p-2 text-slate-500">{req.timestamp}</td>
-                              <td className="p-2 font-bold">{req.proposed.teacherName}</td>
-                              <td className="p-2">{req.proposed.subject}</td>
+                              <td className="p-2">
+                                <span className={`px-2 py-0.5 rounded-full font-bold ${isDelete ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-sky-50 text-sky-700 border border-sky-200"}`}>
+                                  {isDelete ? "מחיקת משרה" : "שינוי משרה"}
+                                </span>
+                              </td>
+                              <td className="p-2 font-bold">{req.current.teacherName}</td>
+                              <td className="p-2">{req.current.subject}</td>
                               <td className="p-2">₪{req.current.totalAnnual.toLocaleString()}</td>
-                              <td className="p-2 font-bold">₪{req.proposed.totalAnnual.toLocaleString()}</td>
-                              <td className={`p-2 text-center font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                                {diff >= 0 ? "+" : ""}₪{diff.toLocaleString()}
+                              <td className="p-2 font-bold">{isDelete ? "—" : `₪${req.proposed.totalAnnual.toLocaleString()}`}</td>
+                              <td className={`p-2 text-center font-bold ${isDelete ? "text-rose-600" : diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                                {isDelete ? `מחיקה ₪${req.current.totalAnnual.toLocaleString()}` : `${diff >= 0 ? "+" : ""}₪${diff.toLocaleString()}`}
                               </td>
                               <td className="p-2 text-center">
                                 <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
-                                  ממתין לאישור המזכירה ⏳
+                                  ממתין לאישור ⏳
                                 </span>
                               </td>
                             </tr>
@@ -2441,29 +2566,29 @@ ____________________                    _____________________                   
                   </div>
                 </div>
 
-                <div className="overflow-hidden">
+                <div className="overflow-auto max-h-[70vh]">
                   <table className="w-full text-right border-collapse table-fixed">
-                    <thead>
-                      <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 text-[10px] font-bold tracking-wide">
-                        <th className="p-1.5 text-center w-[10%] bg-slate-200/50 text-slate-900 font-extrabold leading-tight">סטטוס וחוזים</th>
-                        <th className="p-1.5 w-[5%] text-right hidden lg:table-cell leading-tight">התמחות</th>
-                        <th className="p-1.5 w-[3%] text-center leading-tight">שנה</th>
-                        <th className="p-1.5 w-[8%] text-right leading-tight">שם המורה</th>
-                        <th className="p-1.5 w-[7%] text-right hidden md:table-cell leading-tight">שם המקצוע</th>
-                        <th className="p-1.5 w-[7%] text-right leading-tight hidden lg:table-cell">מחצית / מחזור</th>
-                        <th className="p-1.5 w-[7%] text-center hidden lg:table-cell leading-tight">צורת תשלום</th>
-                        <th className="p-1.5 text-center w-[3%] leading-tight">ש"ש</th>
-                        <th className="p-1.5 text-center w-[5%] hidden md:table-cell leading-tight">חודשים / מפגשים</th>
-                        <th className="p-1.5 text-center w-[5%] bg-amber-50/20 text-amber-900 font-bold leading-tight">שעות שנתיות</th>
-                        <th className="p-1.5 text-center w-[5%] hidden lg:table-cell leading-tight">תעריף לשעה</th>
-                        <th className="p-1.5 text-center w-[5%] bg-emerald-50/30 hidden xl:table-cell leading-tight">עלות מעביד לשעה</th>
-                        <th className="p-1.5 text-center w-[6%] bg-emerald-50/50 text-emerald-900 font-extrabold leading-tight">סה"כ שנתי</th>
-                        <th className="p-1.5 w-[5%] text-center leading-tight hidden lg:table-cell">נסיעות</th>
-                        <th className="p-1.5 w-[7%] text-center leading-tight hidden lg:table-cell">מועד נתינת ציון</th>
-                        <th className="p-1.5 text-center w-[5%] hidden xl:table-cell leading-tight">ת.ז מורה</th>
-                        <th className="p-1.5 text-center w-[6%] hidden lg:table-cell leading-tight">טלפון מורה *</th>
-                        <th className="p-1.5 text-center w-[7%] hidden xl:table-cell leading-tight">אימייל מורה *</th>
-                        <th className="p-1.5 text-center w-[5%] bg-slate-100/50 leading-tight">פעולות</th>
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-slate-200 border-b border-slate-300 text-slate-800 text-[11px] font-bold">
+                        <th className="p-2 text-center w-[10%] bg-slate-300 text-slate-900 font-extrabold leading-tight">סטטוס וחוזים</th>
+                        <th className="p-2 w-[5%] text-right hidden lg:table-cell leading-tight bg-slate-200">התמחות</th>
+                        <th className="p-2 w-[3%] text-center leading-tight bg-slate-200">שנה</th>
+                        <th className="p-2 w-[8%] text-right leading-tight bg-slate-200">שם המורה</th>
+                        <th className="p-2 w-[7%] text-right hidden md:table-cell leading-tight bg-slate-200">שם המקצוע</th>
+                        <th className="p-2 w-[6%] text-right leading-tight hidden lg:table-cell bg-slate-200">מחצית / מחזור</th>
+                        <th className="p-2 w-[7%] text-center hidden lg:table-cell leading-tight bg-slate-200">צורת תשלום</th>
+                        <th className="p-2 text-center w-[3%] leading-tight bg-slate-200">ש"ש</th>
+                        <th className="p-2 text-center w-[3.5%] hidden md:table-cell leading-tight bg-slate-200" title="חודשים לתקן / מפגשים ליתר">מפג׳</th>
+                        <th className="p-2 text-center w-[5%] bg-amber-100 text-amber-950 font-bold leading-tight">שעות שנתיות</th>
+                        <th className="p-2 text-center w-[5%] hidden lg:table-cell leading-tight bg-slate-200">תעריף לשעה</th>
+                        <th className="p-2 text-center w-[5%] bg-emerald-100 hidden xl:table-cell leading-tight">עלות מעביד</th>
+                        <th className="p-2 text-center w-[6%] bg-emerald-200 text-emerald-950 font-extrabold leading-tight">סה"כ שנתי</th>
+                        <th className="p-2 w-[5%] text-center leading-tight hidden lg:table-cell bg-slate-200">נסיעות</th>
+                        <th className="p-2 w-[7%] text-center leading-tight hidden lg:table-cell bg-slate-200">מועד ציון</th>
+                        <th className="p-2 text-center w-[5%] hidden xl:table-cell leading-tight bg-slate-200">ת.ז מורה</th>
+                        <th className="p-2 text-center w-[6%] hidden lg:table-cell leading-tight bg-slate-200">טלפון *</th>
+                        <th className="p-2 text-center w-[7%] hidden xl:table-cell leading-tight bg-slate-200">אימייל *</th>
+                        <th className="p-2 text-center w-[6%] bg-slate-300 leading-tight">פעולות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-[11px]">
@@ -2797,7 +2922,9 @@ ____________________                    _____________________                   
                                 <AutoFitCellText className="font-medium text-slate-800">{item.subject || "—"}</AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell">
-                                <AutoFitCellText className="text-slate-600">{formatSemesterDisplay(item.semester)}</AutoFitCellText>
+                                <AutoFitCellText maxLines={2} className="text-slate-600">
+                                  {formatSemesterDisplay(item.semester)}
+                                </AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center align-middle hidden lg:table-cell">
                                 <span
@@ -2827,8 +2954,8 @@ ____________________                    _____________________                   
                                 </AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle hidden md:table-cell">
-                                <AutoFitCellText align="center" maxFontSize={10} maxLines={2} className="font-medium">
-                                  {`${item.meetings} ${item.paymentMethod === "תקן" ? "חודשים" : "מפגשים"}`}
+                                <AutoFitCellText align="center" maxFontSize={10} className="font-medium">
+                                  {item.meetings}
                                 </AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center font-extrabold text-slate-800 bg-amber-50/20 align-middle">
@@ -2857,7 +2984,7 @@ ____________________                    _____________________                   
                                 </AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center font-medium align-middle text-slate-700 hidden lg:table-cell">
-                                <AutoFitCellText align="center" className="font-medium text-slate-700">
+                                <AutoFitCellText align="center" maxLines={2} className="font-medium text-slate-700">
                                   {formatGradeTimingDisplay(item.gradeTiming) || "—"}
                                 </AutoFitCellText>
                               </td>
@@ -2877,15 +3004,24 @@ ____________________                    _____________________                   
                                 </AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
-                                <div className="flex items-center justify-center gap-1">
+                                <div className="flex items-center justify-center gap-1 flex-wrap">
                                   {item.isApproved && role === "coordinator" ? (
-                                    <button
-                                      onClick={() => openSimulatorModal(item)}
-                                      className="text-[10px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
-                                      title="הגשת בקשת עדכון משרה"
-                                    >
-                                      <Calculator className="w-3 h-3" /> בקשי שינוי
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => openSimulatorModal(item)}
+                                        className="text-[10px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
+                                        title="הגשת בקשת עדכון משרה"
+                                      >
+                                        <Calculator className="w-3 h-3" /> בקשי שינוי
+                                      </button>
+                                      <button
+                                        onClick={() => submitDeleteJobRequest(item)}
+                                        className="text-[10px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-extrabold p-1.5 rounded transition cursor-pointer flex items-center gap-1"
+                                        title="בקשת מחיקת משרה (דורשת אישור מזכירה/מנהלת)"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
                                   ) : (
                                     <>
                                       <button
@@ -3145,15 +3281,15 @@ ____________________                    _____________________                   
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {records.filter((r) => r.paymentMethod === "שכר מרצים").length === 0 ? (
+                      {records.filter((r) => isExecutionEligible(r.paymentMethod)).length === 0 ? (
                         <tr>
                           <td colSpan={16} className="text-center py-10 text-slate-400 font-bold">
-                            אין מורות המועסקות בשכר מרצים במערכת כרגע.
+                            אין מורות לדיווח ביצוע (שכר מרצים / קבלה) במערכת כרגע.
                           </td>
                         </tr>
                       ) : (
                         records
-                          .filter((r) => r.paymentMethod === "שכר מרצים")
+                          .filter((r) => isExecutionEligible(r.paymentMethod))
                           .map((item) => {
                             const monthly = item.monthlyHours || {};
                             const totalDone = MONTH_KEYS.reduce((sum, m) => sum + (parseFloat(String(monthly[m] || 0)) || 0), 0);
@@ -3162,7 +3298,7 @@ ____________________                    _____________________                   
                             const isOver = remaining < 0;
                             return (
                               <tr key={item.id} className={isOver ? "bg-rose-50/80" : remaining === 0 ? "bg-emerald-50/50" : "hover:bg-slate-50"}>
-                                <td className="p-3 font-bold">{item.teacherName}<span className="text-[10px] text-slate-400 block">{item.track}</span></td>
+                                <td className="p-3 font-bold">{item.teacherName}<span className="text-[10px] text-slate-400 block">{item.track} · {item.paymentMethod}</span></td>
                                 <td className="p-3 text-slate-600 truncate max-w-[150px]">{item.subject}</td>
                                 <td className="p-3 text-center bg-emerald-50/30 font-black">{allocated} ש'</td>
                                 <td className="p-3 text-center bg-emerald-50/30 font-bold">₪{item.rate}</td>
@@ -3950,46 +4086,82 @@ ____________________                    _____________________                   
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[115] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center pb-3 border-b border-slate-200 mb-4">
-              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 <Inbox className="w-5 h-5 text-rose-600" />
-                בקשות שינוי תקציביות ממתינות - תשפ"ז
+                בקשות ממתינות לאישור - תשפ"ז
               </h3>
               <button onClick={() => setShowRequestsQueueModal(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
             </div>
             <div className="flex-grow overflow-y-auto pr-1 space-y-4">
               {changeRequests.length === 0 ? (
-                <div className="p-10 text-center font-bold text-slate-400">אין בקשות שינוי תקציביות הממתינות לאישור כעת.</div>
+                <div className="p-10 text-center font-bold text-slate-400">אין בקשות הממתינות לאישור כעת.</div>
               ) : (
                 changeRequests.map((req) => {
+                  const isDelete = req.requestType === "delete";
                   const diff = req.proposed.totalAnnual - req.current.totalAnnual;
                   return (
-                    <div key={req.requestId} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                    <div
+                      key={req.requestId}
+                      className={`border rounded-2xl p-4 space-y-3 ${
+                        isDelete ? "bg-rose-50/40 border-rose-200" : "bg-slate-50 border-slate-200"
+                      }`}
+                    >
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-2 border-b gap-2">
-                        <div>
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">רכזת מסלול: {req.track}</span>
-                          <span className="text-[11px] text-slate-400 mr-2">הוגש ב: {req.timestamp}</span>
+                          <span
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                              isDelete
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : "bg-sky-100 text-sky-800 border border-sky-200"
+                            }`}
+                          >
+                            {isDelete ? "בקשת מחיקת משרה" : "בקשת שינוי משרה"}
+                          </span>
+                          <span className="text-[11px] text-slate-400">הוגש ב: {req.timestamp}</span>
                         </div>
-                        <span className={`text-xs font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                          {diff >= 0 ? `תוספת של ₪${diff.toLocaleString()}` : `חיסכון של ₪${Math.abs(diff).toLocaleString()}`}
-                        </span>
+                        {!isDelete && (
+                          <span className={`text-xs font-bold ${diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                            {diff >= 0 ? `תוספת של ₪${diff.toLocaleString()}` : `חיסכון של ₪${Math.abs(diff).toLocaleString()}`}
+                          </span>
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                        <div className="bg-white p-3 rounded-xl border border-slate-150">
-                          <span className="font-bold text-slate-400 block mb-1">מצב מאושר נוכחי</span>
+                      {isDelete ? (
+                        <div className="bg-white p-3 rounded-xl border border-rose-100 text-xs space-y-1">
+                          <span className="font-bold text-rose-600 block mb-1">משרה למחיקה (כולל התקציב)</span>
                           <p>מורה: <strong>{req.current.teacherName}</strong></p>
-                          <p>מקצוע: {req.current.subject}</p>
-                          <p>עלות שנתית: <strong>₪{req.current.totalAnnual.toLocaleString()}</strong></p>
+                          <p>מקצוע: {req.current.subject} ({formatSemesterDisplay(req.current.semester)})</p>
+                          <p>צורת תשלום: {req.current.paymentMethod}</p>
+                          <p>עלות שנתית שתוסר: <strong className="text-rose-700">₪{req.current.totalAnnual.toLocaleString()}</strong></p>
                         </div>
-                        <div className="bg-emerald-50/20 p-3 rounded-xl border border-emerald-100/50">
-                          <span className="font-bold text-emerald-500 block mb-1">שינוי מוצע מבוקש</span>
-                          <p>מורה: <strong>{req.proposed.teacherName}</strong></p>
-                          <p>מקצוע: {req.proposed.subject} ({formatSemesterDisplay(req.proposed.semester)})</p>
-                          <p>עלות מוצעת: <strong className="text-emerald-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                          <div className="bg-white p-3 rounded-xl border border-slate-150">
+                            <span className="font-bold text-slate-400 block mb-1">מצב מאושר נוכחי</span>
+                            <p>מורה: <strong>{req.current.teacherName}</strong></p>
+                            <p>מקצוע: {req.current.subject}</p>
+                            <p>עלות שנתית: <strong>₪{req.current.totalAnnual.toLocaleString()}</strong></p>
+                          </div>
+                          <div className="bg-emerald-50/20 p-3 rounded-xl border border-emerald-100/50">
+                            <span className="font-bold text-emerald-500 block mb-1">שינוי מוצע מבוקש</span>
+                            <p>מורה: <strong>{req.proposed.teacherName}</strong></p>
+                            <p>מקצוע: {req.proposed.subject} ({formatSemesterDisplay(req.proposed.semester)})</p>
+                            <p>עלות מוצעת: <strong className="text-emerald-700">₪{req.proposed.totalAnnual.toLocaleString()}</strong></p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                       <div className="flex justify-end gap-2 pt-2 border-t">
-                        <button onClick={() => approveChangeRequest(req.requestId)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">אשר ועדכן ✅</button>
-                        <button onClick={() => rejectChangeRequest(req.requestId)} className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">דחה בקשה ❌</button>
+                        <button
+                          onClick={() => approveChangeRequest(req.requestId)}
+                          className={`font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer text-white ${
+                            isDelete ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"
+                          }`}
+                        >
+                          {isDelete ? "אשרי מחיקה ✅" : "אשר ועדכן ✅"}
+                        </button>
+                        <button onClick={() => rejectChangeRequest(req.requestId)} className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">
+                          דחה בקשה ❌
+                        </button>
                       </div>
                     </div>
                   );

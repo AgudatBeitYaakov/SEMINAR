@@ -55,4 +55,6 @@ export interface ChangeRequest {
   current: ChangeRequestSnapshot;
   proposed: ChangeRequestSnapshot;
   timestamp: string;
+  /** "change" = עדכון משרה, "delete" = בקשת מחיקת משרה */
+  requestType?: "change" | "delete";
 }
