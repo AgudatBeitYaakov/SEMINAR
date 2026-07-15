@@ -1,1 +1,39 @@
-[]
+[
+  {
+    "requestId": 1784124488667,
+    "rowId": 13,
+    "track": "קודש",
+    "requestType": "create",
+    "status": "rejected",
+    "current": {
+      "teacherName": "ש",
+      "subject": "ש",
+      "semester": "שנתי",
+      "paymentMethod": "שכר מרצים",
+      "shash": 2,
+      "meetings": 2,
+      "rate": 200,
+      "totalHours": 4,
+      "employerOverhead": 260,
+      "totalAnnual": 1040,
+      "travel": "בית שמש"
+    },
+    "proposed": {
+      "teacherName": "ש",
+      "subject": "ש",
+      "semester": "שנתי",
+      "paymentMethod": "שכר מרצים",
+      "shash": 2,
+      "meetings": 2,
+      "rate": 200,
+      "totalHours": 4,
+      "employerOverhead": 260,
+      "totalAnnual": 1040,
+      "travel": "בית שמש"
+    },
+    "timestamp": "15.7.2026, 17:08:08",
+    "rejectionNote": "חסרים פרטים",
+    "rejectedAt": "15.7.2026, 17:08:08",
+    "rejectedBy": "מנהלת"
+  }
+]

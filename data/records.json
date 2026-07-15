@@ -1,25 +1,5 @@
 [
   {
-    "id": 1,
-    "track": "קודש",
-    "year": "יג",
-    "teacherName": "הרב ישעיהו שפירא",
-    "subject": "פרקי השקפה ומוסר",
-    "semester": "שנתי",
-    "paymentMethod": "שכר מרצים",
-    "shash": 2,
-    "meetings": 30,
-    "totalHours": 60,
-    "rate": 180,
-    "employerOverhead": 234,
-    "totalAnnual": 14040,
-    "tz": "024567891",
-    "phone": "052-7612345",
-    "email": "y.sh@sz.org",
-    "isApproved": true,
-    "isContractReady": true
-  },
-  {
     "id": 2,
     "track": "חנ\"מ והו\"מ",
     "year": "יד",
@@ -56,7 +36,7 @@
     "tz": "055431289",
     "phone": "050-4139988",
     "email": "sh.feldman@sz.org",
-    "isApproved": false,
+    "isApproved": true,
     "isContractReady": false
   },
   {
@@ -78,26 +58,6 @@
     "email": "a.kof@sz.org",
     "isApproved": true,
     "isContractReady": false
-  },
-  {
-    "id": 5,
-    "track": "קודש",
-    "year": "יג",
-    "teacherName": "הרב ישעיהו שפירא",
-    "subject": "מבוא למחשבת ישראל",
-    "semester": "סמסטר א'",
-    "paymentMethod": "שכר מרצים",
-    "shash": 2,
-    "meetings": 15,
-    "totalHours": 30,
-    "rate": 180,
-    "employerOverhead": 234,
-    "totalAnnual": 7020,
-    "tz": "024567891",
-    "phone": "052-7612345",
-    "email": "y.sh@sz.org",
-    "isApproved": true,
-    "isContractReady": true
   },
   {
     "id": 6,
@@ -136,7 +96,7 @@
     "tz": "012345678",
     "phone": "058-9008877",
     "email": "sarah.r@sz.org",
-    "isApproved": false,
+    "isApproved": true,
     "isContractReady": false
   },
   {
@@ -176,7 +136,7 @@
     "tz": "019283746",
     "phone": "054-8419203",
     "email": "esther.l@sz.org",
-    "isApproved": false,
+    "isApproved": true,
     "isContractReady": false
   },
   {

@@ -29,9 +29,10 @@ import {
   FileSignature as SignatureIcon,
   Inbox,
   ChartLine,
-  Send
+  Send,
+  Mail
 } from "lucide-react";
-import { SalaryRecord, UserRole, ChangeRequest } from "./types";
+import { SalaryRecord, UserRole, ChangeRequest, CoordinatorEmails } from "./types";
 
 const ALL_TRACKS = [
   "קודש",
@@ -251,6 +252,9 @@ export default function App() {
   const [passwordError, setPasswordError] = useState("");
   const [showCoordSelectModal, setShowCoordSelectModal] = useState(false);
   const [showPasswordsHelperModal, setShowPasswordsHelperModal] = useState(false);
+  const [showOwnEmailModal, setShowOwnEmailModal] = useState(false);
+  const [coordinatorEmails, setCoordinatorEmails] = useState<CoordinatorEmails>({});
+  const [emailSettingsError, setEmailSettingsError] = useState("");
   const [showContractModal, setShowContractModal] = useState(false);
   const [activeContractRecord, setActiveContractRecord] = useState<SalaryRecord | null>(null);
   const [showFinalReportModal, setShowFinalReportModal] = useState(false);
@@ -341,14 +345,6 @@ export default function App() {
 
   // Load configuration from LocalStorage and backend API on mount
   useEffect(() => {
-    // Passwords fast local fallback
-    const savedPasswords = localStorage.getItem("sz_passwords_store_v2");
-    if (savedPasswords) {
-      try {
-        setPasswords(JSON.parse(savedPasswords));
-      } catch (e) {}
-    }
-
     // Cloud connection state
     const savedUrl = localStorage.getItem("sz_cloud_api_url_v2");
     if (savedUrl) {
@@ -361,56 +357,59 @@ export default function App() {
     if (storedSupUrl) setSupabaseUrl(storedSupUrl);
     if (storedSupKey) setSupabaseKey(storedSupKey);
 
-    fetchPasswords();
     fetchRecords();
     fetchChangeRequests();
+    void (async () => {
+      try {
+        const response = await fetch("/api/auth/session");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data.success || !data.session) return;
+        const restoredRole = data.session.role as UserRole;
+        const restoredTrack = data.session.track as string | null;
+        setRole(restoredRole);
+        setActiveTrack(restoredTrack);
+        setFilterTrack(
+          restoredRole === "coordinator" && restoredTrack ? restoredTrack : "all"
+        );
+        if (restoredRole === "director") await fetchPasswords();
+        if (restoredRole === "director" || restoredRole === "coordinator") {
+          await fetchCoordinatorEmails();
+        }
+      } catch {
+        // A missing/expired session simply leaves the login portal visible.
+      }
+    })();
   }, []);
 
   const fetchPasswords = async () => {
     try {
       const response = await fetch("/api/passwords");
-      if (!response.ok) throw new Error("Express backend not available");
+      if (!response.ok) throw new Error("לא ניתן לטעון את הסיסמאות");
       const data = await response.json();
       if (data.success && data.passwords) {
         setPasswords(data.passwords);
-        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
         setCloudConnectionStyle("express");
         setDbMode(data.dbMode || "cloud");
       }
     } catch (err) {
-      console.warn("API error fetching passwords, attempting direct Supabase fetch:", err);
-      // Fallback to direct client-side Supabase REST
-      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-      if (sUrl && sKey) {
-        try {
-          const directUrl = `${sUrl}/rest/v1/system_config?key=eq.passwords&select=value`;
-          const res = await fetch(directUrl, {
-            headers: {
-              "apikey": sKey,
-              "Authorization": `Bearer ${sKey}`
-            }
-          });
-          if (res.ok) {
-            const rows = await res.json();
-            if (rows && rows.length > 0) {
-              const parsedPasswords = JSON.parse(rows[0].value);
-              setPasswords(parsedPasswords);
-              localStorage.setItem("sz_passwords_store_v2", JSON.stringify(parsedPasswords));
-              setCloudConnectionStyle("direct");
-              setDbMode("cloud");
-              return;
-            }
-          }
-        } catch (directErr) {
-          console.error("Direct Supabase fetch passwords failed:", directErr);
-        }
+      console.warn("Protected passwords API failed:", err);
+    }
+  };
+
+  const fetchCoordinatorEmails = async () => {
+    try {
+      const response = await fetch("/api/coordinator-emails");
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "לא ניתן לטעון את כתובות המייל");
       }
-      // If all cloud pathways fail, fallback to localStorage passwords
-      const saved = localStorage.getItem("sz_passwords_store_v2");
-      if (saved) {
-        try { setPasswords(JSON.parse(saved)); } catch (e) {}
-      }
+      setCoordinatorEmails(data.emails || {});
+      setEmailSettingsError("");
+    } catch (error) {
+      setEmailSettingsError(
+        error instanceof Error ? error.message : "לא ניתן לטעון את כתובות המייל"
+      );
     }
   };
 
@@ -594,6 +593,61 @@ export default function App() {
     setSimulatingRow(null);
   };
 
+  const sendResultNotification = async ({
+    status,
+    requestType,
+    teacherName,
+    subject,
+    track,
+    note = "",
+  }: {
+    status: "approved" | "rejected";
+    requestType: "change" | "delete" | "create";
+    teacherName: string;
+    subject: string;
+    track: string;
+    note?: string;
+  }) => {
+    try {
+      const response = await fetch("/api/notifications/request-result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          requestType,
+          teacherName,
+          subject,
+          track,
+          note,
+          decidedBy:
+            role === "director"
+              ? "המנהלת"
+              : role === "secretary"
+              ? "המזכירה"
+              : "המערכת",
+        }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result?.error || "Email delivery failed");
+      }
+      return true;
+    } catch (error) {
+      console.error("Result notification failed:", error);
+      const technicalMessage =
+        error instanceof Error ? error.message : "Email delivery failed";
+      const message = technicalMessage.includes("No coordinator email")
+        ? `הפעולה נשמרה, אך לא הוגדרה כתובת מייל לרכזת מסלול ${track}.`
+        : "הפעולה נשמרה, אך שליחת המייל נכשלה. בדקי את הגדרות חשבון המייל בשרת.";
+      triggerAlert(
+        message,
+        "error",
+        "המייל לא נשלח"
+      );
+      return false;
+    }
+  };
+
   const approveChangeRequest = async (requestId: number) => {
     const req = changeRequests.find((r) => r.requestId === requestId);
     if (!req) return;
@@ -631,6 +685,13 @@ export default function App() {
         setLoading(false);
       }
 
+      await sendResultNotification({
+        status: "approved",
+        requestType: "delete",
+        teacherName: req.current.teacherName,
+        subject: req.current.subject,
+        track: req.track,
+      });
       await removeChangeRequest(requestId);
       await fetchRecords();
       await fetchChangeRequests();
@@ -697,6 +758,13 @@ export default function App() {
       }
     }
 
+    await sendResultNotification({
+      status: "approved",
+      requestType: "change",
+      teacherName: req.proposed.teacherName,
+      subject: req.proposed.subject,
+      track: req.track,
+    });
     await removeChangeRequest(requestId);
     await fetchRecords();
     await fetchChangeRequests();
@@ -736,6 +804,14 @@ export default function App() {
     };
 
     await persistChangeRequest(updatedReq);
+    await sendResultNotification({
+      status: "rejected",
+      requestType: req.requestType || "change",
+      teacherName: req.current.teacherName,
+      subject: req.current.subject,
+      track: req.track,
+      note,
+    });
     await fetchChangeRequests();
     setRejectNoteModalRequestId(null);
     setRejectNoteInput("");
@@ -849,6 +925,14 @@ export default function App() {
         return;
       }
 
+      await sendResultNotification({
+        status: "rejected",
+        requestType: "create",
+        teacherName: row.teacherName,
+        subject: row.subject,
+        track: row.track,
+        note,
+      });
       setRecords((prev) => prev.filter((r) => r.id !== row.id));
       setRejectSalaryRecordId(null);
       setRejectNoteInput("");
@@ -975,50 +1059,57 @@ export default function App() {
     setEditModalId(null);
     setShowFinalReportModal(false);
     setShowPasswordsHelperModal(false);
+    setShowOwnEmailModal(false);
+    setEmailSettingsError("");
     setRejectNoteModalRequestId(null);
     setRejectSalaryRecordId(null);
     setRejectNoteInput("");
   };
 
-  const submitPassword = () => {
-    if (pendingRoleSwitch === "director") {
-      if (passwordInput === passwords.director) {
-        clearRoleScopedUi();
-        setRole("director");
-        setActiveTrack(null);
-        setShowPasswordModal(false);
-        setPendingRoleSwitch(null);
-        setFilterTrack("all");
-        triggerAlert("ברוכה הבאה, מנהלת הסמינר!", "success", "כניסה מורשית");
-      } else {
-        setPasswordError("סיסמת מנהלת שגויה!");
+  const submitPassword = async () => {
+    if (!pendingRoleSwitch || pendingRoleSwitch === "guest") return;
+    const requestedTrack =
+      pendingRoleSwitch === "coordinator" ? pendingTrackSwitch : null;
+    if (pendingRoleSwitch === "coordinator" && !requestedTrack) return;
+    try {
+      setPasswordError("");
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: pendingRoleSwitch,
+          track: requestedTrack,
+          password: passwordInput,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setPasswordError(
+          pendingRoleSwitch === "director"
+            ? "סיסמת מנהלת שגויה!"
+            : pendingRoleSwitch === "secretary"
+            ? "סיסמת מזכירה שגויה!"
+            : "סיסמת רכזת שגויה!"
+        );
+        return;
       }
-    } else if (pendingRoleSwitch === "secretary") {
-      if (passwordInput === passwords.secretary) {
-        clearRoleScopedUi();
-        setRole("secretary");
-        setActiveTrack(null);
-        setShowPasswordModal(false);
-        setPendingRoleSwitch(null);
-        setFilterTrack("all");
-        triggerAlert("ברוכה הבאה, מזכירת הסמינר!", "success", "כניסה מורשית");
+      clearRoleScopedUi();
+      setRole(pendingRoleSwitch);
+      setActiveTrack(requestedTrack);
+      setFilterTrack(requestedTrack || "all");
+      setShowPasswordModal(false);
+      setPendingRoleSwitch(null);
+      setPendingTrackSwitch(null);
+      setPasswordInput("");
+      if (pendingRoleSwitch === "director") {
+        await Promise.all([fetchPasswords(), fetchCoordinatorEmails()]);
+      } else if (pendingRoleSwitch === "coordinator") {
+        await fetchCoordinatorEmails();
       } else {
-        setPasswordError("סיסמת מזכירה שגויה!");
+        setCoordinatorEmails({});
       }
-    } else if (pendingRoleSwitch === "coordinator" && pendingTrackSwitch) {
-      const correctPassword = passwords.coordinators[pendingTrackSwitch] || pendingTrackSwitch;
-      if (passwordInput === correctPassword) {
-        clearRoleScopedUi();
-        setRole("coordinator");
-        setActiveTrack(pendingTrackSwitch);
-        setShowPasswordModal(false);
-        setFilterTrack(pendingTrackSwitch);
-        setPendingRoleSwitch(null);
-        setPendingTrackSwitch(null);
-        triggerAlert(`ברוכה הבאה, רכזת מסלול ${pendingTrackSwitch}!`, "success", "כניסה מורשית");
-      } else {
-        setPasswordError("סיסמת רכזת שגויה!");
-      }
+    } catch {
+      setPasswordError("לא ניתן להתחבר לשרת. נסי שוב.");
     }
   };
 
@@ -1670,6 +1761,15 @@ export default function App() {
       if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success) {
+        if (approvedStatus && !row.isApproved) {
+          await sendResultNotification({
+            status: "approved",
+            requestType: "create",
+            teacherName: row.teacherName,
+            subject: row.subject,
+            track: row.track,
+          });
+        }
         triggerAlert(
           `משרת המורה "${row.teacherName}" ${approvedStatus ? "אושרה לתשלום בהצלחה!" : "הועברה חזרה למצב ממתין לאישור."}`,
           "success"
@@ -1697,6 +1797,15 @@ export default function App() {
             body: JSON.stringify(dbPayload)
           });
           if (res.ok) {
+            if (approvedStatus && !row.isApproved) {
+              await sendResultNotification({
+                status: "approved",
+                requestType: "create",
+                teacherName: row.teacherName,
+                subject: row.subject,
+                track: row.track,
+              });
+            }
             triggerAlert(
               `משרת המורה "${row.teacherName}" ${approvedStatus ? "אושרה לתשלום בענן!" : "הועברה חזרה למצב ממתין לאישור בענן."}`,
               "success"
@@ -1716,6 +1825,15 @@ export default function App() {
           const localRows = JSON.parse(localData);
           const updated = localRows.map((r: any) => r.id === id ? updatedRow : r);
           localStorage.setItem("sz_local_records_v2", JSON.stringify(updated));
+          if (approvedStatus && !row.isApproved) {
+            await sendResultNotification({
+              status: "approved",
+              requestType: "create",
+              teacherName: row.teacherName,
+              subject: row.subject,
+              track: row.track,
+            });
+          }
           triggerAlert(
             `משרת המורה "${row.teacherName}" ${approvedStatus ? "אושרה לתשלום מקומית!" : "הועברה חזרה למצב ממתין לאישור מקומית."}`,
             "success"
@@ -1736,71 +1854,52 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(passwords)
       });
-      if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
-      if (data.success && data.passwords) {
-        setPasswords(data.passwords);
-        localStorage.setItem("sz_passwords_store_v2", JSON.stringify(data.passwords));
-        triggerAlert("הסיסמאות עודכנו ונשמרו בהצלחה במסד הנתונים ובמערכת!", "success");
-        return;
+      if (!response.ok || !data.success || !data.passwords) {
+        throw new Error(data.error || "שמירת הסיסמאות נכשלה");
       }
-      throw new Error("Backend passwords save failed status");
-    } catch (e) {
-      console.warn("Express backend save passwords failed, trying direct Supabase save:", e);
-
-      const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-      const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-      if (sUrl && sKey) {
-        try {
-          // Check if key exists
-          const checkRes = await fetch(`${sUrl}/rest/v1/system_config?key=eq.passwords`, {
-            headers: {
-              "apikey": sKey,
-              "Authorization": `Bearer ${sKey}`
-            }
-          });
-          const rows = await checkRes.json();
-          let saveRes;
-          if (rows && rows.length > 0) {
-            // PATCH existing key
-            saveRes = await fetch(`${sUrl}/rest/v1/system_config?key=eq.passwords`, {
-              method: "PATCH",
-              headers: {
-                "apikey": sKey,
-                "Authorization": `Bearer ${sKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ value: JSON.stringify(passwords) })
-            });
-          } else {
-            // POST new key
-            saveRes = await fetch(`${sUrl}/rest/v1/system_config`, {
-              method: "POST",
-              headers: {
-                "apikey": sKey,
-                "Authorization": `Bearer ${sKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ key: "passwords", value: JSON.stringify(passwords) })
-            });
-          }
-
-          if (saveRes.ok) {
-            localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
-            triggerAlert("הסיסמאות עודכנו ונשמרו בהצלחה בענן!", "success");
-            return;
-          }
-        } catch (directErr) {
-          console.error("Direct Supabase passwords save failed:", directErr);
-        }
-      }
-
-      localStorage.setItem("sz_passwords_store_v2", JSON.stringify(passwords));
-      triggerAlert("הסיסמאות עודכנו מקומית!", "info");
+      setPasswords(data.passwords);
+    } catch (error) {
+      triggerAlert(
+        error instanceof Error ? error.message : "שמירת הסיסמאות נכשלה",
+        "error"
+      );
     } finally {
       setLoading(false);
-      setShowPasswordsHelperModal(false);
+    }
+  };
+
+  const handleSaveCoordinatorEmails = async () => {
+    const visibleTracks =
+      role === "coordinator" && activeTrack ? [activeTrack] : ALL_TRACKS;
+    const invalidTrack = visibleTracks.find((track) => {
+      const email = (coordinatorEmails[track] || "").trim();
+      return email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    });
+    if (invalidTrack) {
+      setEmailSettingsError(`כתובת המייל של מסלול ${invalidTrack} אינה תקינה`);
+      return;
+    }
+    try {
+      setLoading(true);
+      setEmailSettingsError("");
+      const response = await fetch("/api/coordinator-emails", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: coordinatorEmails }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "שמירת כתובות המייל נכשלה");
+      }
+      setCoordinatorEmails((current) => ({ ...current, ...data.emails }));
+      if (role === "coordinator") setShowOwnEmailModal(false);
+    } catch (error) {
+      setEmailSettingsError(
+        error instanceof Error ? error.message : "שמירת כתובות המייל נכשלה"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2229,10 +2328,16 @@ ____________________                    _____________________                   
     return computeCalculations(editShash, editMeetings, editRate, editPaymentMethod);
   }, [editShash, editMeetings, editRate, editPaymentMethod]);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Local UI logout still proceeds if the server is temporarily unavailable.
+    }
     clearRoleScopedUi();
     setRole("guest");
     setActiveTrack(null);
+    setCoordinatorEmails({});
   };
 
   return (
@@ -2473,10 +2578,26 @@ ____________________                    _____________________                   
                         {/* Password helper for Director only */}
                         {role === "director" && (
                           <button
-                            onClick={() => setShowPasswordsHelperModal(true)}
+                            onClick={() => {
+                              setEmailSettingsError("");
+                              void Promise.all([fetchPasswords(), fetchCoordinatorEmails()]);
+                              setShowPasswordsHelperModal(true);
+                            }}
                             className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium px-2.5 py-1 rounded border border-emerald-100 transition-all shadow-sm cursor-pointer"
                           >
-                            <Key className="w-3 h-3 inline ml-1 text-emerald-500" /> ניהול סיסמאות רכזות 🔑
+                            <Key className="w-3 h-3 inline ml-1 text-emerald-500" /> ניהול רכזות
+                          </button>
+                        )}
+                        {role === "coordinator" && activeTrack && (
+                          <button
+                            onClick={() => {
+                              setEmailSettingsError("");
+                              void fetchCoordinatorEmails();
+                              setShowOwnEmailModal(true);
+                            }}
+                            className="text-[10px] bg-sky-50 text-sky-700 hover:bg-sky-100 font-medium px-2.5 py-1 rounded border border-sky-100 transition-all shadow-sm cursor-pointer"
+                          >
+                            <Mail className="w-3 h-3 inline ml-1" /> המייל שלי
                           </button>
                         )}
                       </div>
@@ -3697,21 +3818,26 @@ ____________________                    _____________________                   
       {/* 4. PASSWORDS MANAGER HELPER MODAL */}
       {showPasswordsHelperModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 relative">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 shadow-xl border border-slate-200 relative">
             <h3 className="text-base font-semibold text-slate-800 mb-3 text-center">
-              ניהול סיסמאות רכזות דינמי
+              ניהול רכזות לפי מסלול
             </h3>
             <p className="text-xs text-slate-400 text-center mb-4 font-normal">
-              המנהלת יכולה לצפות ולשנות מכאן את סיסמאות הכניסה של הרכזות בכל מסלול
+              המנהלת יכולה לשנות סיסמת כניסה וכתובת מייל לקבלת תשובות
             </p>
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-[7rem_8rem_1fr] gap-2 px-2 pb-1 text-[10px] font-semibold text-slate-500">
+              <span>מסלול</span>
+              <span>סיסמה</span>
+              <span>מייל הרכזת</span>
+            </div>
+            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
               {ALL_TRACKS.map((track) => (
                 <div
                   key={track}
-                  className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200/50 rounded-lg gap-4"
+                  className="grid grid-cols-[7rem_8rem_1fr] items-center p-2 bg-slate-50 border border-slate-200/50 rounded-lg gap-2"
                 >
-                  <span className="text-xs font-semibold text-slate-600 w-32">רכזת {track}:</span>
+                  <span className="text-xs font-semibold text-slate-600">{track}</span>
                   <input
                     type="text"
                     value={passwords.coordinators[track] || ""}
@@ -3719,24 +3845,97 @@ ____________________                    _____________________                   
                       const updated = { ...passwords.coordinators, [track]: e.target.value };
                       setPasswords({ ...passwords, coordinators: updated });
                     }}
-                    className="border border-slate-200 rounded px-2 py-1 text-xs w-40 font-mono font-bold tracking-widest text-center focus:outline-none focus:border-emerald-500 bg-white"
+                    className="min-w-0 border border-slate-200 rounded px-2 py-1 text-xs font-mono font-bold tracking-widest text-center focus:outline-none focus:border-emerald-500 bg-white"
+                    aria-label={`סיסמת רכזת ${track}`}
+                  />
+                  <input
+                    type="email"
+                    dir="ltr"
+                    value={coordinatorEmails[track] || ""}
+                    onChange={(e) =>
+                      setCoordinatorEmails((current) => ({
+                        ...current,
+                        [track]: e.target.value,
+                      }))
+                    }
+                    placeholder="name@example.com"
+                    className="min-w-0 border border-slate-200 rounded px-2 py-1 text-xs text-left focus:outline-none focus:border-sky-500 bg-white"
+                    aria-label={`מייל רכזת ${track}`}
                   />
                 </div>
               ))}
             </div>
+            {emailSettingsError && (
+              <p className="mt-3 text-xs text-rose-600 text-center">
+                {emailSettingsError}
+              </p>
+            )}
 
-            <div className="flex gap-2 mt-5">
+            <div className="flex flex-wrap gap-2 mt-5">
               <button
                 onClick={handleSaveCoordinatorPasswords}
-                className="flex-grow bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+                disabled={loading}
+                className="flex-grow bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
-                שמירת שינויים
+                שמירת סיסמאות
+              </button>
+              <button
+                onClick={handleSaveCoordinatorEmails}
+                disabled={loading}
+                className="flex-grow bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+              >
+                שמירת כתובות מייל
               </button>
               <button
                 onClick={() => setShowPasswordsHelperModal(false)}
-                className="flex-grow bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
+                className="flex-grow bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium px-3 py-1.5 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
               >
                 סגירה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showOwnEmailModal && role === "coordinator" && activeTrack && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200">
+            <h3 className="text-base font-semibold text-slate-800 mb-2 text-center">
+              המייל שלי — מסלול {activeTrack}
+            </h3>
+            <p className="text-xs text-slate-500 text-center mb-4">
+              לכתובת זו יישלחו תוצאות אישור או דחייה של הבקשות שלך.
+            </p>
+            <input
+              type="email"
+              dir="ltr"
+              autoFocus
+              value={coordinatorEmails[activeTrack] || ""}
+              onChange={(e) =>
+                setCoordinatorEmails((current) => ({
+                  ...current,
+                  [activeTrack]: e.target.value,
+                }))
+              }
+              placeholder="name@example.com"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-left focus:outline-none focus:border-sky-500"
+            />
+            {emailSettingsError && (
+              <p className="mt-2 text-xs text-rose-600">{emailSettingsError}</p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={handleSaveCoordinatorEmails}
+                disabled={loading}
+                className="flex-grow bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg text-xs"
+              >
+                שמירת המייל
+              </button>
+              <button
+                onClick={() => setShowOwnEmailModal(false)}
+                className="flex-grow bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium py-2 rounded-lg text-xs"
+              >
+                ביטול
               </button>
             </div>
           </div>

@@ -34,6 +34,8 @@ export interface AuthState {
   track: string | null;
 }
 
+export type CoordinatorEmails = Record<string, string>;
+
 export interface ChangeRequestSnapshot {
   teacherName: string;
   subject: string;
