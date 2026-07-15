@@ -553,6 +553,11 @@ async function saveChangeRequest(request: any) {
     current: request.current,
     proposed: request.proposed,
     timestamp: request.timestamp || new Date().toLocaleString("he-IL"),
+    requestType: request.requestType || "change",
+    status: request.status || "pending",
+    rejectionNote: request.rejectionNote || "",
+    rejectedAt: request.rejectedAt || "",
+    rejectedBy: request.rejectedBy || "",
   });
 
   const pool = getDbPool();
@@ -786,7 +791,13 @@ app.post("/api/configure-db", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        // Saving local JSON (approve row etc.) must not full-reload and kick users to login
+        watch: {
+          ignored: ["**/data/**"],
+        },
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);

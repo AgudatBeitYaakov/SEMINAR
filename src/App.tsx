@@ -269,6 +269,10 @@ export default function App() {
   const [simTravel, setSimTravel] = useState("בית שמש");
   const [showRequestsQueueModal, setShowRequestsQueueModal] = useState(false);
   const [isExecutionViewActive, setIsExecutionViewActive] = useState(false);
+  const [rejectNoteModalRequestId, setRejectNoteModalRequestId] = useState<number | null>(null);
+  const [rejectSalaryRecordId, setRejectSalaryRecordId] = useState<number | null>(null);
+  const [rejectNoteInput, setRejectNoteInput] = useState("");
+  const [coordinatorSubmitNotice, setCoordinatorSubmitNotice] = useState<string | null>(null);
 
   // End-of-year permanent wipe (Director only, requires typed confirmation)
   const [showWipeModal, setShowWipeModal] = useState(false);
@@ -472,28 +476,65 @@ export default function App() {
   };
 
   const fetchChangeRequests = async () => {
+    let serverRequests: ChangeRequest[] = [];
+    let serverOk = false;
     try {
       const response = await fetch("/api/change-requests");
       if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success && Array.isArray(data.requests)) {
-        setChangeRequests(data.requests);
-        localStorage.setItem("sz_change_requests_queue", JSON.stringify(data.requests));
-        return;
+        serverRequests = data.requests;
+        serverOk = true;
       }
-      throw new Error("Invalid response");
     } catch (err) {
       console.warn("API error fetching change requests, trying localStorage:", err);
+    }
+
+    let localRequests: ChangeRequest[] = [];
+    try {
       const saved = localStorage.getItem("sz_change_requests_queue");
-      if (saved) {
-        try {
-          setChangeRequests(JSON.parse(saved));
-        } catch (e) {}
+      if (saved) localRequests = JSON.parse(saved);
+    } catch (e) {}
+
+    // מיזוג: לא לאבד בקשות ממתינות שנשמרו מקומית אם השרת ריק/לא זמין
+    const byId = new Map<number, ChangeRequest>();
+    if (serverOk) {
+      serverRequests.forEach((r) => byId.set(r.requestId, r));
+      localRequests.forEach((r) => {
+        if (!byId.has(r.requestId) && (!r.status || r.status === "pending" || r.status === "rejected")) {
+          byId.set(r.requestId, r);
+        }
+      });
+    } else {
+      localRequests.forEach((r) => byId.set(r.requestId, r));
+    }
+
+    const merged = Array.from(byId.values()).sort((a, b) => b.requestId - a.requestId);
+    setChangeRequests(merged);
+    localStorage.setItem("sz_change_requests_queue", JSON.stringify(merged));
+
+    // אם יש בקשות רק מקומית — דוחפים אותן לשרת כדי שמזכירה/מנהלת יראו
+    if (serverOk) {
+      for (const r of localRequests) {
+        if (!serverRequests.some((s) => s.requestId === r.requestId) && (!r.status || r.status === "pending" || r.status === "rejected")) {
+          try {
+            await fetch("/api/change-requests", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(r),
+            });
+          } catch {}
+        }
       }
     }
   };
 
   const persistChangeRequest = async (request: ChangeRequest) => {
+    // תמיד שומרים מקומית מיד — כדי שלא תיאבד הבקשה ברענון
+    const optimistic = [...changeRequests.filter((r) => r.requestId !== request.requestId), request];
+    setChangeRequests(optimistic);
+    localStorage.setItem("sz_change_requests_queue", JSON.stringify(optimistic));
+
     try {
       const response = await fetch("/api/change-requests", {
         method: "POST",
@@ -503,20 +544,18 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          const updated = [...changeRequests.filter((r) => r.requestId !== request.requestId), data.request || request];
+          const saved = (data.request || request) as ChangeRequest;
+          const updated = [...optimistic.filter((r) => r.requestId !== saved.requestId), saved];
           setChangeRequests(updated);
           localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
-          return data.request as ChangeRequest;
+          return saved;
         }
       }
+      throw new Error("Save change request failed");
     } catch (err) {
-      console.warn("Express save change request failed:", err);
+      console.warn("Express save change request failed; kept in local queue:", err);
+      return request;
     }
-
-    const updated = [...changeRequests.filter((r) => r.requestId !== request.requestId), request];
-    localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
-    setChangeRequests(updated);
-    return request;
   };
 
   const removeChangeRequest = async (requestId: number) => {
@@ -667,39 +706,198 @@ export default function App() {
   const rejectChangeRequest = (requestId: number) => {
     const req = changeRequests.find((r) => r.requestId === requestId);
     if (!req) return;
-    const isDelete = req.requestType === "delete";
-    triggerConfirm(
-      isDelete
-        ? `האם את בטוחה שברצונך לדחות את בקשת המחיקה של משרת המורה "${req.current.teacherName}"?`
-        : `האם את בטוחה שברצונך להסיר את בקשת השינוי של משרת המורה "${req.current.teacherName}"?`,
-      async () => {
-        await removeChangeRequest(requestId);
-        await fetchChangeRequests();
-        setShowRequestsQueueModal(false);
-        triggerAlert(
-          isDelete
-            ? "בקשת המחיקה הוסרה. המשרה נשארת במערכת."
-            : "הבקשה הוסרה מרשימת ההמתנה. מומלץ לשלוח הודעה לרכזת על סיבת הדחייה.",
-          "info",
-          isDelete ? "בקשת מחיקה נדחתה" : "בקשה הוסרה"
-        );
+    setRejectNoteInput("");
+    setRejectNoteModalRequestId(requestId);
+  };
+
+  const confirmRejectChangeRequest = async () => {
+    if (rejectNoteModalRequestId === null) return;
+    const req = changeRequests.find((r) => r.requestId === rejectNoteModalRequestId);
+    if (!req) {
+      setRejectNoteModalRequestId(null);
+      return;
+    }
+
+    const note = rejectNoteInput.trim();
+    if (!note) {
+      triggerAlert("חובה לכתוב הערה לרכזת לפני דחיית הבקשה.", "error");
+      return;
+    }
+
+    const rejectedBy =
+      role === "director" ? "מנהלת" : role === "secretary" ? "מזכירה" : "מערכת";
+
+    const updatedReq: ChangeRequest = {
+      ...req,
+      status: "rejected",
+      rejectionNote: note,
+      rejectedAt: new Date().toLocaleString("he-IL"),
+      rejectedBy,
+    };
+
+    await persistChangeRequest(updatedReq);
+    await fetchChangeRequests();
+    setRejectNoteModalRequestId(null);
+    setRejectNoteInput("");
+    setShowRequestsQueueModal(false);
+  };
+
+  const dismissRejectedRequest = async (requestId: number) => {
+    await removeChangeRequest(requestId);
+    await fetchChangeRequests();
+  };
+
+  const openRejectSalaryRecord = (rowId: number) => {
+    setRejectNoteInput("");
+    setRejectSalaryRecordId(rowId);
+  };
+
+  const confirmRejectSalaryRecord = async () => {
+    if (role !== "director" || rejectSalaryRecordId === null) return;
+    const row = records.find((r) => r.id === rejectSalaryRecordId);
+    if (!row) {
+      setRejectSalaryRecordId(null);
+      return;
+    }
+
+    const note = rejectNoteInput.trim();
+    if (!note) {
+      triggerAlert("חובה לכתוב הערה לרכזת לפני דחיית המשרה.", "error");
+      return;
+    }
+
+    const snapshot = {
+      teacherName: row.teacherName,
+      subject: row.subject,
+      semester: row.semester,
+      paymentMethod: row.paymentMethod,
+      shash: row.shash,
+      meetings: row.meetings,
+      rate: row.rate,
+      totalHours: row.totalHours,
+      employerOverhead: row.employerOverhead,
+      totalAnnual: row.totalAnnual,
+      travel: row.travel,
+    };
+
+    const rejectedRequest: ChangeRequest = {
+      requestId: Date.now(),
+      rowId: row.id,
+      track: row.track,
+      requestType: "create",
+      status: "rejected",
+      current: snapshot,
+      proposed: snapshot,
+      timestamp: new Date().toLocaleString("he-IL"),
+      rejectionNote: note,
+      rejectedAt: new Date().toLocaleString("he-IL"),
+      rejectedBy: "מנהלת",
+    };
+
+    setLoading(true);
+    try {
+      await persistChangeRequest(rejectedRequest);
+
+      let deleted = false;
+      try {
+        const response = await fetch(`/api/records/${row.id}`, { method: "DELETE" });
+        deleted = response.ok;
+      } catch {}
+
+      if (!deleted) {
+        const sUrl =
+          localStorage.getItem("sz_supabase_url") ||
+          process.env.NEXT_PUBLIC_SUPABASE_URL ||
+          "";
+        const sKey =
+          localStorage.getItem("sz_supabase_key") ||
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+          "";
+        if (sUrl && sKey) {
+          try {
+            const response = await fetch(
+              `${sUrl}/rest/v1/salary_records?id=eq.${row.id}`,
+              {
+                method: "DELETE",
+                headers: {
+                  apikey: sKey,
+                  Authorization: `Bearer ${sKey}`,
+                },
+              }
+            );
+            deleted = response.ok;
+          } catch {}
+        }
       }
-    );
+
+      if (!deleted) {
+        try {
+          const localData = localStorage.getItem("sz_local_records_v2");
+          const localRows: SalaryRecord[] = localData
+            ? JSON.parse(localData)
+            : records;
+          localStorage.setItem(
+            "sz_local_records_v2",
+            JSON.stringify(localRows.filter((r) => r.id !== row.id))
+          );
+          deleted = true;
+        } catch {}
+      }
+
+      if (!deleted) {
+        triggerAlert("לא ניתן היה להסיר את המשרה. נסי שוב.", "error");
+        return;
+      }
+
+      setRecords((prev) => prev.filter((r) => r.id !== row.id));
+      setRejectSalaryRecordId(null);
+      setRejectNoteInput("");
+      setShowRequestsQueueModal(false);
+      await fetchRecords();
+      await fetchChangeRequests();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleExecutionView = () => {
+    if (role !== "secretary" && role !== "coordinator") return;
     setIsExecutionViewActive((prev) => !prev);
   };
 
+  /** רשומות לדיווח ביצוע — מזכירה: כל המסלולים; רכזת: רק המסלול שלה */
+  const executionRecords = useMemo(() => {
+    return records.filter((r) => {
+      if (!isExecutionEligible(r.paymentMethod)) return false;
+      if (role === "coordinator") {
+        if (!activeTrack) return false;
+        return normalizeTrack(r.track) === normalizeTrack(activeTrack);
+      }
+      if (role === "secretary") return true;
+      return false;
+    });
+  }, [records, role, activeTrack]);
+
+  /** מסך דיווח ביצוע מותר רק למזכירה או רכזת — לא נשאר פתוח אחרי החלפת תפקיד */
+  const showExecutionView =
+    isExecutionViewActive && (role === "secretary" || role === "coordinator");
+
   const updateMonthlyHourValue = async (teacherId: number, month: string, valueStr: string) => {
-    const idx = records.findIndex((item) => item.id === teacherId);
-    if (idx === -1) return;
+    // רכזת יכולה לעדכן רק מורות מהמסלול שלה
+    const target = records.find((item) => item.id === teacherId);
+    if (!target) return;
+    if (role === "coordinator" && activeTrack && normalizeTrack(target.track) !== normalizeTrack(activeTrack)) {
+      return;
+    }
+    if (role !== "secretary" && role !== "coordinator") {
+      return;
+    }
 
     const cleanedVal = valueStr.trim().replace(/[^\d.]/g, "");
     const hours = parseFloat(cleanedVal) || 0;
     const updatedRow: SalaryRecord = {
-      ...records[idx],
-      monthlyHours: { ...(records[idx].monthlyHours || {}), [month]: hours },
+      ...target,
+      monthlyHours: { ...(target.monthlyHours || {}), [month]: hours },
     };
 
     setRecords((prev) => prev.map((r) => (r.id === teacherId ? updatedRow : r)));
@@ -720,8 +918,26 @@ export default function App() {
 
   const coordinatorSentRequests = useMemo(() => {
     if (!activeTrack) return [];
-    return changeRequests.filter((req) => req.track === activeTrack);
+    return changeRequests.filter(
+      (req) =>
+        normalizeTrack(req.track) === normalizeTrack(activeTrack) &&
+        (req.status === "pending" || req.status === "rejected" || !req.status)
+    );
   }, [changeRequests, activeTrack]);
+
+  const pendingChangeRequests = useMemo(
+    () => changeRequests.filter((r) => !r.status || r.status === "pending"),
+    [changeRequests]
+  );
+
+  /** משרות חדשות שנשמרו על ידי רכזת ועדיין ממתינות לאישור מנהלת */
+  const pendingSalaryRecords = useMemo(
+    () => records.filter((r) => r.id > 0 && !r.isApproved),
+    [records]
+  );
+
+  const totalPendingApprovals =
+    pendingChangeRequests.length + pendingSalaryRecords.length;
 
   // Switch role with password check
   const handleRoleSwitchInitiate = (targetRole: UserRole) => {
@@ -747,9 +963,27 @@ export default function App() {
     setShowPasswordModal(true);
   };
 
+  /** בעת החלפת תפקיד — סוגרים מסכי תפקיד קודם כדי שלא תישאר גישה לא נכונה */
+  const clearRoleScopedUi = () => {
+    setIsExecutionViewActive(false);
+    setShowRequestsQueueModal(false);
+    setShowSimulatorModal(false);
+    setSimulatingRow(null);
+    setShowContractModal(false);
+    setActiveContractRecord(null);
+    setActiveEditingId(null);
+    setEditModalId(null);
+    setShowFinalReportModal(false);
+    setShowPasswordsHelperModal(false);
+    setRejectNoteModalRequestId(null);
+    setRejectSalaryRecordId(null);
+    setRejectNoteInput("");
+  };
+
   const submitPassword = () => {
     if (pendingRoleSwitch === "director") {
       if (passwordInput === passwords.director) {
+        clearRoleScopedUi();
         setRole("director");
         setActiveTrack(null);
         setShowPasswordModal(false);
@@ -761,6 +995,7 @@ export default function App() {
       }
     } else if (pendingRoleSwitch === "secretary") {
       if (passwordInput === passwords.secretary) {
+        clearRoleScopedUi();
         setRole("secretary");
         setActiveTrack(null);
         setShowPasswordModal(false);
@@ -773,6 +1008,7 @@ export default function App() {
     } else if (pendingRoleSwitch === "coordinator" && pendingTrackSwitch) {
       const correctPassword = passwords.coordinators[pendingTrackSwitch] || pendingTrackSwitch;
       if (passwordInput === correctPassword) {
+        clearRoleScopedUi();
         setRole("coordinator");
         setActiveTrack(pendingTrackSwitch);
         setShowPasswordModal(false);
@@ -1051,6 +1287,7 @@ export default function App() {
       rowId: simulatingRow.id,
       track: simulatingRow.track,
       requestType: "change",
+      status: "pending",
       current: {
         teacherName: simulatingRow.teacherName,
         subject: simulatingRow.subject,
@@ -1080,7 +1317,7 @@ export default function App() {
 
     await persistChangeRequest(request);
     await fetchChangeRequests();
-    triggerAlert("בקשת השינוי והעדכון נשלחה בהצלחה אל המזכירה האחראית לבחינה ואישור! 📤", "success");
+    setCoordinatorSubmitNotice("הבקשה נשלחה בהצלחה! המזכירה/מנהלת יראו אותה תחת ״בקשות ממתינות״.");
     closeSimulatorModal();
   };
 
@@ -1091,7 +1328,10 @@ export default function App() {
     }
 
     const alreadyPending = changeRequests.some(
-      (r) => r.rowId === row.id && r.requestType === "delete"
+      (r) =>
+        r.rowId === row.id &&
+        r.requestType === "delete" &&
+        (!r.status || r.status === "pending")
     );
     if (alreadyPending) {
       triggerAlert("כבר קיימת בקשת מחיקה ממתינה למשרה זו.", "info");
@@ -1119,13 +1359,14 @@ export default function App() {
           rowId: row.id,
           track: row.track,
           requestType: "delete",
+          status: "pending",
           current: snapshot,
           proposed: snapshot,
           timestamp: new Date().toLocaleString("he-IL"),
         };
         await persistChangeRequest(request);
         await fetchChangeRequests();
-        triggerAlert("בקשת מחיקת המשרה נשלחה לאישור מזכירה / מנהלת.", "success");
+        setCoordinatorSubmitNotice("בקשת המחיקה נשלחה לאישור. המזכירה/מנהלת יאשרו או ידחו עם הערה.");
       }
     );
   };
@@ -1638,7 +1879,7 @@ export default function App() {
     return merged.sort((a, b) => a.localeCompare(b, "he"));
   }, [records]);
 
-  // General Totals Metric
+  // General Totals Metric — עוקב אחרי הסינון הפעיל (התמחות, תשלום, שנה וכו')
   const metrics = useMemo(() => {
     let totalBudget = 0;
     let approvedBudget = 0;
@@ -1648,10 +1889,7 @@ export default function App() {
     let countReceipt = 0;
     let countExempt = 0;
 
-    // Use total records or filtered? The dashboard original used cumulative dataset, but let's aggregate for all records in the system or filtered based on role
-    const sourceRecords = role === "coordinator" ? records.filter(r => r.track === activeTrack) : records;
-
-    sourceRecords.forEach((item) => {
+    filteredRecords.forEach((item) => {
       totalBudget += item.totalAnnual;
       totalHours += item.totalHours;
       if (item.isApproved) {
@@ -1675,9 +1913,9 @@ export default function App() {
       countLecturer,
       countReceipt,
       countExempt,
-      totalSaved: records.filter((r) => r.id > 0).length
+      totalSaved: filteredRecords.filter((r) => r.id > 0).length,
     };
-  }, [records, role, activeTrack]);
+  }, [filteredRecords]);
 
   // Track budget statistics for visualization
   const trackBudgets = useMemo(() => {
@@ -1953,7 +2191,11 @@ ____________________                    _____________________                   
   };
 
   const handleExportExecutionToExcel = () => {
-    const executionRows = records.filter((r) => isExecutionEligible(r.paymentMethod));
+    if (role !== "secretary" && role !== "coordinator") {
+      triggerAlert("אין הרשאה לייצוא דיווח ביצוע בתפקיד הנוכחי.", "error");
+      return;
+    }
+    const executionRows = executionRecords;
     if (executionRows.length === 0) {
       triggerAlert("אין מורות לדיווח ביצוע (שכר מרצים / קבלה) לייצוא!", "info");
       return;
@@ -1974,7 +2216,8 @@ ____________________                    _____________________                   
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", "דיווח_ביצוע_חודשי_תשפז.csv");
+    const trackSuffix = role === "coordinator" && activeTrack ? `_${activeTrack}` : "";
+    link.setAttribute("download", `דיווח_ביצוע_חודשי${trackSuffix}_תשפז.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1987,9 +2230,9 @@ ____________________                    _____________________                   
   }, [editShash, editMeetings, editRate, editPaymentMethod]);
 
   const logout = () => {
+    clearRoleScopedUi();
     setRole("guest");
     setActiveTrack(null);
-    setIsExecutionViewActive(false);
   };
 
   return (
@@ -2209,21 +2452,21 @@ ____________________                    _____________________                   
                           >
                             <Inbox className="w-3 h-3" />
                             בקשות ממתינות
-                            {changeRequests.length > 0 && (
+                            {totalPendingApprovals > 0 && (
                               <span className="bg-rose-600 text-white rounded-full px-1.5 text-[9px] font-black">
-                                {changeRequests.length}
+                                {totalPendingApprovals}
                               </span>
                             )}
                           </button>
                         )}
 
-                        {role === "secretary" && (
+                        {(role === "secretary" || role === "coordinator") && (
                           <button
                             onClick={toggleExecutionView}
                             className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-extrabold px-2.5 py-1 rounded border border-emerald-200 transition-all shadow-sm cursor-pointer flex items-center gap-1"
                           >
                             <ChartLine className="w-3 h-3" />
-                            {isExecutionViewActive ? "חזרה לניהול תקציב 📋" : "דיווח וביצוע שעות 📊"}
+                            {showExecutionView ? "חזרה לניהול תקציב 📋" : "דיווח וביצוע שעות 📊"}
                           </button>
                         )}
 
@@ -2282,7 +2525,7 @@ ____________________                    _____________________                   
 
             {/* Main Content Area */}
             <main className="flex-grow max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-              {!isExecutionViewActive ? (
+              {!showExecutionView ? (
               <>
               {/* Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -2496,6 +2739,17 @@ ____________________                    _____________________                   
               </div>
 
               {/* Coordinator sent requests tracking */}
+              {role === "coordinator" && coordinatorSubmitNotice && (
+                <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-4 py-3 text-xs font-semibold flex justify-between items-center gap-3">
+                  <span>{coordinatorSubmitNotice}</span>
+                  <button
+                    onClick={() => setCoordinatorSubmitNotice(null)}
+                    className="text-emerald-700 hover:text-emerald-900 font-bold cursor-pointer"
+                  >
+                    סגירה
+                  </button>
+                </div>
+              )}
               {role === "coordinator" && coordinatorSentRequests.length > 0 && (
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mb-8">
                   <div className="flex items-center gap-2 mb-4">
@@ -2513,19 +2767,25 @@ ____________________                    _____________________                   
                           <th className="p-2">תעריף שנתי נוכחי</th>
                           <th className="p-2">תעריף שנתי מבוקש</th>
                           <th className="p-2 text-center">הפרש כספי</th>
-                          <th className="p-2 text-center">סטטוס</th>
+                          <th className="p-2 text-center">סטטוס / הערה</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {coordinatorSentRequests.map((req) => {
                           const isDelete = req.requestType === "delete";
+                          const isCreate = req.requestType === "create";
+                          const isRejected = req.status === "rejected";
                           const diff = req.proposed.totalAnnual - req.current.totalAnnual;
                           return (
-                            <tr key={req.requestId} className="hover:bg-slate-50">
+                            <tr key={req.requestId} className={`hover:bg-slate-50 ${isRejected ? "bg-rose-50/40" : ""}`}>
                               <td className="p-2 text-slate-500">{req.timestamp}</td>
                               <td className="p-2">
                                 <span className={`px-2 py-0.5 rounded-full font-bold ${isDelete ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-sky-50 text-sky-700 border border-sky-200"}`}>
-                                  {isDelete ? "מחיקת משרה" : "שינוי משרה"}
+                                  {isDelete
+                                    ? "מחיקת משרה"
+                                    : isCreate
+                                    ? "משרה חדשה"
+                                    : "שינוי משרה"}
                                 </span>
                               </td>
                               <td className="p-2 font-bold">{req.current.teacherName}</td>
@@ -2535,10 +2795,31 @@ ____________________                    _____________________                   
                               <td className={`p-2 text-center font-bold ${isDelete ? "text-rose-600" : diff >= 0 ? "text-rose-600" : "text-emerald-600"}`}>
                                 {isDelete ? `מחיקה ₪${req.current.totalAnnual.toLocaleString()}` : `${diff >= 0 ? "+" : ""}₪${diff.toLocaleString()}`}
                               </td>
-                              <td className="p-2 text-center">
-                                <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
-                                  ממתין לאישור ⏳
-                                </span>
+                              <td className="p-2 text-center max-w-[220px]">
+                                {isRejected ? (
+                                  <div className="space-y-1.5 text-right">
+                                    <span className="bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full font-bold inline-block">
+                                      נדחתה ❌
+                                    </span>
+                                    <p className="text-[11px] text-rose-800 bg-white border border-rose-100 rounded-lg px-2 py-1.5 leading-relaxed">
+                                      <span className="font-bold block text-rose-600 mb-0.5">
+                                        הערת {req.rejectedBy || "המערכת"}
+                                        {req.rejectedAt ? ` · ${req.rejectedAt}` : ""}:
+                                      </span>
+                                      {req.rejectionNote || "—"}
+                                    </p>
+                                    <button
+                                      onClick={() => dismissRejectedRequest(req.requestId)}
+                                      className="text-[10px] text-slate-500 hover:text-slate-700 underline cursor-pointer"
+                                    >
+                                      הסר מהמעקב
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
+                                    ממתין לאישור ⏳
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -3237,16 +3518,19 @@ ____________________                    _____________________                   
               </div>
               </>
               ) : (
-              /* Execution reporting view */
+              /* Execution reporting view — secretary: all tracks; coordinator: own track only */
               <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-200 mb-8">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b gap-4">
                   <div>
                     <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                       <ChartLine className="w-6 h-6 text-emerald-600" />
-                      מערכת דיווח חודשי וביצוע שעות (שכר מרצים)
+                      מערכת דיווח חודשי וביצוע שעות
+                      {role === "coordinator" && activeTrack ? ` · מסלול ${activeTrack}` : ""}
                     </h2>
                     <p className="text-xs text-slate-400 mt-1">
-                      המזכירה האחראית עוקבת ומעדכנת כאן שעות ביצוע מדווחות בפועל מול שעות שהוקצו לכל מורה.
+                      {role === "coordinator"
+                        ? `רכזת מסלול ${activeTrack || ""} — רק מורות המסלול (שכר מרצים / קבלה), ללא מורות תקן.`
+                        : "המזכירה האחראית עוקבת ומעדכנת כאן שעות ביצוע מדווחות בפועל מול שעות שהוקצו (שכר מרצים / קבלה)."}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -3281,16 +3565,16 @@ ____________________                    _____________________                   
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {records.filter((r) => isExecutionEligible(r.paymentMethod)).length === 0 ? (
+                      {executionRecords.length === 0 ? (
                         <tr>
                           <td colSpan={16} className="text-center py-10 text-slate-400 font-bold">
-                            אין מורות לדיווח ביצוע (שכר מרצים / קבלה) במערכת כרגע.
+                            {role === "coordinator"
+                              ? `אין מורות לדיווח ביצוע במסלול ${activeTrack || ""} כרגע.`
+                              : "אין מורות לדיווח ביצוע (שכר מרצים / קבלה) במערכת כרגע."}
                           </td>
                         </tr>
                       ) : (
-                        records
-                          .filter((r) => isExecutionEligible(r.paymentMethod))
-                          .map((item) => {
+                        executionRecords.map((item) => {
                             const monthly = item.monthlyHours || {};
                             const totalDone = MONTH_KEYS.reduce((sum, m) => sum + (parseFloat(String(monthly[m] || 0)) || 0), 0);
                             const allocated = item.totalHours || 0;
@@ -4093,10 +4377,81 @@ ____________________                    _____________________                   
               <button onClick={() => setShowRequestsQueueModal(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
             </div>
             <div className="flex-grow overflow-y-auto pr-1 space-y-4">
-              {changeRequests.length === 0 ? (
-                <div className="p-10 text-center font-bold text-slate-400">אין בקשות הממתינות לאישור כעת.</div>
+              {pendingSalaryRecords.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-black text-slate-700 flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                    משרות חדשות הממתינות לאישור מנהלת
+                  </h4>
+                  {pendingSalaryRecords.map((row) => (
+                    <div
+                      key={`salary-${row.id}`}
+                      className="bg-emerald-50/40 border border-emerald-200 rounded-2xl p-4"
+                    >
+                      <div className="flex flex-col sm:flex-row justify-between gap-3">
+                        <div className="text-xs space-y-1">
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full px-2.5 py-1 font-bold">
+                              משרה חדשה
+                            </span>
+                            <span className="bg-white text-slate-700 border border-slate-200 rounded-full px-2.5 py-1 font-bold">
+                              מסלול {row.track}
+                            </span>
+                          </div>
+                          <p>מורה: <strong>{row.teacherName || "—"}</strong></p>
+                          <p>מקצוע: {row.subject || "—"} ({formatSemesterDisplay(row.semester)})</p>
+                          <p>צורת תשלום: {row.paymentMethod}</p>
+                          <p>
+                            עלות שנתית:{" "}
+                            <strong className="text-emerald-700">
+                              ₪{row.totalAnnual.toLocaleString()}
+                            </strong>
+                          </p>
+                        </div>
+                        <div className="flex items-end">
+                          {role === "director" ? (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              <button
+                                onClick={() => handleToggleApproved(row.id, true)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-xs transition cursor-pointer"
+                              >
+                                אשרי משרה ✅
+                              </button>
+                              <button
+                                onClick={() => openRejectSalaryRecord(row.id)}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-4 py-2 rounded-lg text-xs transition cursor-pointer"
+                              >
+                                דחי עם הערה ❌
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 font-bold">
+                              ממתין לאישור מנהלת
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pendingChangeRequests.length > 0 && (
+                <h4 className="text-xs font-black text-slate-700 flex items-center gap-2 pt-2">
+                  <Inbox className="w-4 h-4 text-sky-600" />
+                  בקשות שינוי ומחיקה
+                </h4>
+              )}
+
+              {totalPendingApprovals === 0 ? (
+                <div className="p-10 text-center font-bold text-slate-400 space-y-2">
+                  <div>אין בקשות הממתינות לאישור כעת.</div>
+                  <p className="text-xs font-normal text-slate-400 leading-relaxed max-w-md mx-auto">
+                    משרות חדשות ובקשות שינוי/מחיקה של רכזות יופיעו כאן.
+                  </p>
+                </div>
               ) : (
-                changeRequests.map((req) => {
+                pendingChangeRequests.map((req) => {
                   const isDelete = req.requestType === "delete";
                   const diff = req.proposed.totalAnnual - req.current.totalAnnual;
                   return (
@@ -4160,9 +4515,44 @@ ____________________                    _____________________                   
                           {isDelete ? "אשרי מחיקה ✅" : "אשר ועדכן ✅"}
                         </button>
                         <button onClick={() => rejectChangeRequest(req.requestId)} className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold px-4 py-1.5 rounded-lg text-xs transition cursor-pointer">
-                          דחה בקשה ❌
+                          דחה והוסף הערה ❌
                         </button>
                       </div>
+                      {rejectNoteModalRequestId === req.requestId && (
+                        <div className="mt-3 bg-rose-50 border border-rose-200 rounded-xl p-4">
+                          <label className="block text-xs font-black text-rose-800 mb-1">
+                            הערה לרכזת המסלול *
+                          </label>
+                          <p className="text-[11px] text-rose-600 mb-2">
+                            ההערה תופיע אצל הרכזת במעקב הבקשות שלה.
+                          </p>
+                          <textarea
+                            autoFocus
+                            value={rejectNoteInput}
+                            onChange={(e) => setRejectNoteInput(e.target.value)}
+                            rows={3}
+                            placeholder="כתבי כאן את סיבת הדחייה או מה נדרש לתקן..."
+                            className="w-full px-3 py-2 bg-white border border-rose-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-400 resize-none"
+                          />
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            <button
+                              onClick={confirmRejectChangeRequest}
+                              className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-lg text-xs transition cursor-pointer"
+                            >
+                              אשרי דחייה ושלחי הערה
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRejectNoteModalRequestId(null);
+                                setRejectNoteInput("");
+                              }}
+                              className="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 font-bold px-4 py-2 rounded-lg text-xs transition cursor-pointer"
+                            >
+                              ביטול
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -4170,6 +4560,60 @@ ____________________                    _____________________                   
             </div>
             <div className="flex justify-end pt-3 border-t mt-4">
               <button onClick={() => setShowRequestsQueueModal(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 px-5 rounded-xl text-xs transition cursor-pointer">סגירה</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11a. REJECT NEW SALARY RECORD — דחיית משרה חדשה עם הערה */}
+      {rejectSalaryRecordId !== null && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-rose-100">
+            <h3 className="text-base font-black text-slate-900 mb-1 flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-rose-600" />
+              דחיית משרה חדשה
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              המשרה תוסר מהתקציב, וההערה תוצג לרכזת המסלול.
+            </p>
+            {(() => {
+              const row = records.find((r) => r.id === rejectSalaryRecordId);
+              if (!row) return null;
+              return (
+                <div className="text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 space-y-0.5">
+                  <p>מסלול: <strong>{row.track}</strong></p>
+                  <p>מורה: <strong>{row.teacherName}</strong></p>
+                  <p>מקצוע: {row.subject}</p>
+                  <p>עלות שנתית: <strong>₪{row.totalAnnual.toLocaleString()}</strong></p>
+                </div>
+              );
+            })()}
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">
+              סיבת הדחייה לרכזת *
+            </label>
+            <textarea
+              value={rejectNoteInput}
+              onChange={(e) => setRejectNoteInput(e.target.value)}
+              rows={4}
+              placeholder="לדוגמה: חסרים פרטים / המשרה אינה מאושרת בתקציב / יש לתקן את הנתונים..."
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-400 resize-none"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={confirmRejectSalaryRecord}
+                className="flex-grow bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                דחי משרה ושלחי הערה
+              </button>
+              <button
+                onClick={() => {
+                  setRejectSalaryRecordId(null);
+                  setRejectNoteInput("");
+                }}
+                className="flex-grow bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+              >
+                ביטול
+              </button>
             </div>
           </div>
         </div>

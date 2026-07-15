@@ -55,6 +55,11 @@ export interface ChangeRequest {
   current: ChangeRequestSnapshot;
   proposed: ChangeRequestSnapshot;
   timestamp: string;
-  /** "change" = עדכון משרה, "delete" = בקשת מחיקת משרה */
-  requestType?: "change" | "delete";
+  /** change = עדכון, delete = מחיקה, create = משרה חדשה */
+  requestType?: "change" | "delete" | "create";
+  /** pending = ממתינה לאישור; rejected = נדחתה עם הערה לרכזת */
+  status?: "pending" | "rejected";
+  rejectionNote?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
 }
