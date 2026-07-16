@@ -634,7 +634,7 @@ app.post("/api/auth/login", async (req, res) => {
 app.get("/api/auth/session", (req, res) => {
   const session = readSession(req);
   if (!session) {
-    return res.status(401).json({ success: false });
+    return res.json({ success: false });
   }
   res.json({
     success: true,
