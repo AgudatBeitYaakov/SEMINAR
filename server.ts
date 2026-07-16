@@ -502,8 +502,10 @@ async function checkDbModeOnRequest() {
   }
 }
 
-// Bootstrap on startup
-bootstrapDatabase();
+// Bootstrap on startup without crashing the serverless function on cold start.
+void bootstrapDatabase().catch((error) => {
+  console.error("Initial database bootstrap failed:", error);
+});
 
 async function readSystemConfig<T>(
   key: string,
