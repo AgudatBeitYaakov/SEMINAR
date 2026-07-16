@@ -14,6 +14,16 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
+// Vercel catch-all functions may receive paths without the /api prefix.
+if (process.env.VERCEL) {
+  app.use((req, _res, next) => {
+    if (req.url && !req.url.startsWith("/api")) {
+      req.url = `/api${req.url.startsWith("/") ? "" : "/"}${req.url}`;
+    }
+    next();
+  });
+}
+
 app.use(express.json());
 
 const escapeHtml = (value: unknown) =>
@@ -148,8 +158,11 @@ async function sendRequestResultEmail(payload: {
   return result;
 }
 
-// Path for local storage fallback when no DATABASE_URL is provided
-const DATA_DIR = path.join(process.cwd(), "data");
+// Vercel Functions have a read-only project filesystem; /tmp is writable but
+// ephemeral. Production persistence still goes to Supabase/Postgres.
+const DATA_DIR = process.env.VERCEL
+  ? path.join("/tmp", "seminar-data")
+  : path.join(process.cwd(), "data");
 const LOCAL_DB_PATH = path.join(DATA_DIR, "records.json");
 const LOCAL_PASSWORDS_PATH = path.join(DATA_DIR, "passwords.json");
 const LOCAL_CHANGE_REQUESTS_PATH = path.join(DATA_DIR, "change_requests.json");
@@ -1241,4 +1254,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
