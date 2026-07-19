@@ -1322,12 +1322,8 @@ export default function App() {
 
   // Row mathematical calculations engine
   const computeCalculations = (shash: number, meetings: number, rate: number, paymentMethod: string) => {
-    let totalHours = 0;
-    if (paymentMethod === "תקן") {
-      totalHours = Math.round(shash * 30);
-    } else {
-      totalHours = Math.round(shash * meetings);
-    }
+    // All payment methods: ש"ש × מפגשים/חודשים (including תקן — no fixed 30 weeks)
+    const totalHours = Math.round(shash * meetings);
 
     let overheadFactor = 1.0;
     if (paymentMethod === "תקן") {
@@ -1341,6 +1337,7 @@ export default function App() {
     }
 
     const employerOverhead = Math.round(rate * overheadFactor);
+    // סה"כ שנתי = ש"ש × מפג׳ × תעריף × מקדם תקורות (תקן: +45%)
     const totalAnnual = Math.round(totalHours * employerOverhead);
 
     return { totalHours, employerOverhead, totalAnnual };
@@ -3567,15 +3564,13 @@ ____________________                    _____________________                   
                         משרת תקן (חודשי)
                       </h4>
                       <p className="text-[11px] text-slate-500 leading-relaxed mb-3 font-normal">
-                        עלות המעביד כוללת תוספת של <strong>45%</strong>. שעות התלמידות מוכפלות ב-30
-                        (משקף את השעות השנתיות), בעוד שכר המורה מחושב ישירות מתעריף השעה החודשית.
+                        עלות המעביד כוללת תוספת של <strong>45%</strong>. החישוב הוא ש"ש × מפג׳/חודשים × תעריף לשעה,
+                        ללא קביעה קבועה של 30 שבועות — בין אם התעריף חודשי או שבועי.
                       </p>
                       <div className="bg-emerald-50/50 p-2.5 rounded border border-emerald-100/50 text-[10px] font-mono text-emerald-950 leading-relaxed">
-                        שעות שנתיות לתלמידות = ש"ש × 30
+                        סה"כ שנתי שכר = ש"ש × מפג׳ × תעריף לשעה × 1.45
                         <br />
                         עלות מעביד לשעה = תעריף לשעה × 1.45
-                        <br />
-                        סה"כ שנתי שכר = שעות שנתיות × עלות מעביד לשעה
                       </div>
                     </div>
 
