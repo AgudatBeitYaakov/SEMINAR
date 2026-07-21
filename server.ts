@@ -170,6 +170,7 @@ const LOCAL_COORDINATOR_EMAILS_PATH = path.join(DATA_DIR, "coordinator_emails.js
 const INITIAL_PASSWORDS = {
   director: "צפורה",
   secretary: "שרייבר",
+  viewer: "2626",
   coordinators: {
     "קודש": "קודש",
     "חובה": "חובה",
@@ -182,7 +183,7 @@ const INITIAL_PASSWORDS = {
 };
 
 type SessionPayload = {
-  role: "director" | "secretary" | "coordinator";
+  role: "director" | "secretary" | "coordinator" | "viewer";
   track: string | null;
   expiresAt: number;
 };
@@ -271,6 +272,18 @@ const requireRoles =
     (req as any).session = session;
     next();
   };
+
+const blockViewerWrites = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
+  const session = readSession(req);
+  if (session?.role === "viewer") {
+    return res.status(403).json({ success: false, error: "Read-only access" });
+  }
+  next();
+};
 
 // Ensure data folder exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -403,6 +416,7 @@ async function bootstrapDatabase() {
         await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS travel TEXT;");
         await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS grade_timing TEXT;");
         await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS monthly_hours TEXT;");
+        await client.query("ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS lesson_name TEXT;");
 
         await client.query(`
           CREATE TABLE IF NOT EXISTS system_config (
@@ -606,7 +620,7 @@ app.post("/api/auth/login", async (req, res) => {
   const role = req.body?.role as SessionPayload["role"];
   const track = typeof req.body?.track === "string" ? req.body.track : null;
   const password = typeof req.body?.password === "string" ? req.body.password : "";
-  if (!["director", "secretary", "coordinator"].includes(role)) {
+  if (!["director", "secretary", "coordinator", "viewer"].includes(role)) {
     return res.status(400).json({ success: false, error: "Invalid role" });
   }
   const passwords = await getPasswords();
@@ -615,6 +629,8 @@ app.post("/api/auth/login", async (req, res) => {
       ? passwords.director
       : role === "secretary"
       ? passwords.secretary
+      : role === "viewer"
+      ? passwords.viewer ?? INITIAL_PASSWORDS.viewer
       : track
       ? passwords.coordinators[track]
       : null;
@@ -722,6 +738,7 @@ async function getRecords() {
         year: row.year,
         teacherName: row.teacher_name,
         subject: row.subject,
+        lessonName: row.lesson_name || "",
         semester: row.semester,
         paymentMethod: row.payment_method,
         shash: Number(row.shash),
@@ -759,6 +776,7 @@ async function getRecords() {
         year: row.year,
         teacherName: row.teacher_name,
         subject: row.subject,
+        lessonName: row.lesson_name || "",
         semester: row.semester,
         paymentMethod: row.payment_method,
         shash: Number(row.shash),
@@ -802,6 +820,7 @@ async function saveRecord(item: any) {
     year: item.year,
     teacher_name: item.teacherName,
     subject: item.subject,
+    lesson_name: item.lessonName || "",
     semester: item.semester,
     payment_method: item.paymentMethod,
     shash: item.shash,
@@ -828,14 +847,14 @@ async function saveRecord(item: any) {
         // Update existing record
         const res = await pool.query(
           `UPDATE salary_records 
-           SET track = $1, year = $2, teacher_name = $3, subject = $4, semester = $5, payment_method = $6, 
-               shash = $7, meetings = $8, total_hours = $9, rate = $10, employer_overhead = $11, total_annual = $12, 
-               tz = $13, phone = $14, email = $15, is_approved = $16, is_contract_ready = $17,
-               travel = $18, grade_timing = $19, monthly_hours = $20
-           WHERE id = $21
+           SET track = $1, year = $2, teacher_name = $3, subject = $4, lesson_name = $5, semester = $6, payment_method = $7, 
+               shash = $8, meetings = $9, total_hours = $10, rate = $11, employer_overhead = $12, total_annual = $13, 
+               tz = $14, phone = $15, email = $16, is_approved = $17, is_contract_ready = $18,
+               travel = $19, grade_timing = $20, monthly_hours = $21
+           WHERE id = $22
            RETURNING *`,
           [
-            item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
+            item.track, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
             item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
             item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}",
@@ -849,11 +868,11 @@ async function saveRecord(item: any) {
         // Create new record
         const res = await pool.query(
           `INSERT INTO salary_records 
-           (track, year, teacher_name, subject, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready, travel, grade_timing, monthly_hours)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+           (track, year, teacher_name, subject, lesson_name, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready, travel, grade_timing, monthly_hours)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
            RETURNING id`,
           [
-            item.track, item.year, item.teacherName, item.subject, item.semester, item.paymentMethod,
+            item.track, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
             item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
             item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
@@ -1095,7 +1114,7 @@ app.get("/api/records", async (req, res) => {
   }
 });
 
-app.post("/api/records", async (req, res) => {
+app.post("/api/records", blockViewerWrites, async (req, res) => {
   try {
     const saved = await saveRecord(req.body);
     res.json({ success: true, dbMode, record: saved });
@@ -1104,7 +1123,7 @@ app.post("/api/records", async (req, res) => {
   }
 });
 
-app.delete("/api/records/:id", async (req, res) => {
+app.delete("/api/records/:id", blockViewerWrites, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     await deleteRecord(id);
@@ -1123,7 +1142,7 @@ app.get("/api/change-requests", async (req, res) => {
   }
 });
 
-app.post("/api/change-requests", async (req, res) => {
+app.post("/api/change-requests", blockViewerWrites, async (req, res) => {
   try {
     const saved = await saveChangeRequest(req.body);
     res.json({ success: true, dbMode, request: saved });
@@ -1132,7 +1151,7 @@ app.post("/api/change-requests", async (req, res) => {
   }
 });
 
-app.delete("/api/change-requests/:id", async (req, res) => {
+app.delete("/api/change-requests/:id", blockViewerWrites, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     await deleteChangeRequest(id);
@@ -1218,7 +1237,7 @@ app.post("/api/passwords", requireRoles(["director"]), async (req, res) => {
 });
 
 // Endpoint to force reload of DB configuration if user sets/updates DATABASE_URL
-app.post("/api/configure-db", async (req, res) => {
+app.post("/api/configure-db", blockViewerWrites, async (req, res) => {
   const { databaseUrl } = req.body;
   if (databaseUrl) {
     process.env.DATABASE_URL = databaseUrl;

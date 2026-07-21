@@ -30,7 +30,8 @@ import {
   Inbox,
   ChartLine,
   Send,
-  Mail
+  Mail,
+  Eye
 } from "lucide-react";
 import { SalaryRecord, UserRole, ChangeRequest, CoordinatorEmails } from "./types";
 
@@ -47,6 +48,7 @@ const ALL_TRACKS = [
 const INITIAL_PASSWORDS = {
   director: "צפורה",
   secretary: "שרייבר",
+  viewer: "2626",
   coordinators: {
     "קודש": "קודש",
     "חובה": "חובה",
@@ -85,6 +87,30 @@ const GRADE_TIMING_OPTIONS = [
   "ציון בסיום קורס",
   "ללא ציון",
 ];
+
+const YEAR_OPTIONS = [
+  "יג1",
+  "יג2",
+  "יד1",
+  "יד2",
+  "יד",
+  "יג",
+  "יד1+יד2",
+  "הוראה יג",
+  "הוראה יד",
+  "כל הסמינר",
+  "יג1+יג2",
+];
+
+const hasSubjectOrLesson = (subject: string, lessonName?: string) =>
+  Boolean((subject || "").trim() || (lessonName || "").trim());
+
+const formatSubjectDisplay = (subject: string, lessonName?: string) => {
+  const subjectText = (subject || "").trim();
+  const lessonText = (lessonName || "").trim();
+  if (subjectText && lessonText) return `${subjectText} · ${lessonText}`;
+  return subjectText || lessonText || "—";
+};
 
 const formatSemesterDisplay = (semester: string) =>
   (semester || "שנתי").replace(/סמסטר/g, "מחצית");
@@ -228,6 +254,7 @@ export default function App() {
   const [editYear, setEditYear] = useState("יג");
   const [editTeacherName, setEditTeacherName] = useState("");
   const [editSubject, setEditSubject] = useState("");
+  const [editLessonName, setEditLessonName] = useState("");
   const [editSemester, setEditSemester] = useState("שנתי");
   const [editPaymentMethod, setEditPaymentMethod] = useState("שכר מרצים");
   const [editShash, setEditShash] = useState(0);
@@ -265,6 +292,7 @@ export default function App() {
   const [simulatingRow, setSimulatingRow] = useState<SalaryRecord | null>(null);
   const [simName, setSimName] = useState("");
   const [simSubject, setSimSubject] = useState("");
+  const [simLessonName, setSimLessonName] = useState("");
   const [simSemester, setSimSemester] = useState("שנתי");
   const [simPaymentMethod, setSimPaymentMethod] = useState("שכר מרצים");
   const [simShash, setSimShash] = useState(0);
@@ -291,6 +319,8 @@ export default function App() {
   const [alertConfig, setAlertConfig] = useState<{ show: boolean; text: string; type: "success" | "error" | "info"; title: string } | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{ show: boolean; text: string; onConfirm: () => void } | null>(null);
 
+  const canModify = role !== "guest" && role !== "viewer";
+
   // DB payload mapping helpers
   const mapRecordToDb = (item: any) => {
     return {
@@ -298,6 +328,7 @@ export default function App() {
       year: item.year,
       teacher_name: item.teacherName,
       subject: item.subject,
+      lesson_name: item.lessonName || "",
       semester: item.semester,
       payment_method: item.paymentMethod,
       shash: item.shash,
@@ -324,6 +355,7 @@ export default function App() {
       year: dbItem.year,
       teacherName: dbItem.teacher_name,
       subject: dbItem.subject,
+      lessonName: dbItem.lesson_name || "",
       semester: dbItem.semester,
       paymentMethod: dbItem.payment_method,
       shash: Number(dbItem.shash || 0),
@@ -579,6 +611,7 @@ export default function App() {
     setSimulatingRow(row);
     setSimName(row.teacherName);
     setSimSubject(row.subject);
+    setSimLessonName(row.lessonName || "");
     setSimSemester(formatSemesterDisplay(row.semester));
     setSimPaymentMethod(row.paymentMethod);
     setSimShash(row.shash);
@@ -949,15 +982,14 @@ export default function App() {
     setIsExecutionViewActive((prev) => !prev);
   };
 
-  /** רשומות לדיווח ביצוע — מזכירה: כל המסלולים; רכזת: רק המסלול שלה */
+  /** רשומות מצב וביצוע — מזכירה: משרות לדיווח; רכזת: כל מורות המסלול שלה */
   const executionRecords = useMemo(() => {
     return records.filter((r) => {
-      if (!isExecutionEligible(r.paymentMethod)) return false;
       if (role === "coordinator") {
         if (!activeTrack) return false;
         return normalizeTrack(r.track) === normalizeTrack(activeTrack);
       }
-      if (role === "secretary") return true;
+      if (role === "secretary") return isExecutionEligible(r.paymentMethod);
       return false;
     });
   }, [records, role, activeTrack]);
@@ -967,15 +999,10 @@ export default function App() {
     isExecutionViewActive && (role === "secretary" || role === "coordinator");
 
   const updateMonthlyHourValue = async (teacherId: number, month: string, valueStr: string) => {
-    // רכזת יכולה לעדכן רק מורות מהמסלול שלה
+    // Only the secretary updates execution; coordinators have read-only visibility.
+    if (role !== "secretary") return;
     const target = records.find((item) => item.id === teacherId);
     if (!target) return;
-    if (role === "coordinator" && activeTrack && normalizeTrack(target.track) !== normalizeTrack(activeTrack)) {
-      return;
-    }
-    if (role !== "secretary" && role !== "coordinator") {
-      return;
-    }
 
     const cleanedVal = valueStr.trim().replace(/[^\d.]/g, "");
     const hours = parseFloat(cleanedVal) || 0;
@@ -1034,6 +1061,10 @@ export default function App() {
       setPasswordError("");
       setPasswordInput("");
       setShowPasswordModal(true);
+    } else if (targetRole === "viewer") {
+      setPasswordError("");
+      setPasswordInput("");
+      setShowPasswordModal(true);
     } else if (targetRole === "coordinator") {
       setShowCoordSelectModal(true);
     }
@@ -1089,6 +1120,8 @@ export default function App() {
             ? "סיסמת מנהלת שגויה!"
             : pendingRoleSwitch === "secretary"
             ? "סיסמת מזכירה שגויה!"
+            : pendingRoleSwitch === "viewer"
+            ? "סיסמת בית יעקב שגויה!"
             : "סיסמת רכזת שגויה!"
         );
         return;
@@ -1322,8 +1355,10 @@ export default function App() {
 
   // Row mathematical calculations engine
   const computeCalculations = (shash: number, meetings: number, rate: number, paymentMethod: string) => {
-    // All payment methods: ש"ש × מפגשים/חודשים (including תקן — no fixed 30 weeks)
-    const totalHours = Math.round(shash * meetings);
+    const totalHours =
+      paymentMethod === "תקן"
+        ? Math.round(shash * 30)
+        : Math.round(shash * meetings);
 
     let overheadFactor = 1.0;
     if (paymentMethod === "תקן") {
@@ -1337,7 +1372,6 @@ export default function App() {
     }
 
     const employerOverhead = Math.round(rate * overheadFactor);
-    // סה"כ שנתי = ש"ש × מפג׳ × תעריף × מקדם תקורות (תקן: +45%)
     const totalAnnual = Math.round(totalHours * employerOverhead);
 
     return { totalHours, employerOverhead, totalAnnual };
@@ -1365,8 +1399,8 @@ export default function App() {
 
   const submitChangeRequest = async () => {
     if (!simulatingRow) return;
-    if (!simName.trim() || !simSubject.trim()) {
-      triggerAlert("חובה למלא את שם המורה והמקצוע לפני הגשת הבקשה!", "error");
+    if (!simName.trim() || !hasSubjectOrLesson(simSubject, simLessonName)) {
+      triggerAlert("חובה למלא את שם המורה ולפחות אחד מ: שם המקצוע / שם השעור!", "error");
       return;
     }
 
@@ -1379,6 +1413,7 @@ export default function App() {
       current: {
         teacherName: simulatingRow.teacherName,
         subject: simulatingRow.subject,
+        lessonName: simulatingRow.lessonName,
         semester: simulatingRow.semester,
         paymentMethod: simulatingRow.paymentMethod,
         shash: simulatingRow.shash,
@@ -1390,6 +1425,7 @@ export default function App() {
       proposed: {
         teacherName: simName.trim(),
         subject: simSubject.trim(),
+        lessonName: simLessonName.trim(),
         semester: simSemester,
         paymentMethod: simPaymentMethod,
         shash: simShash,
@@ -1461,6 +1497,7 @@ export default function App() {
 
   // Add empty row
   const handleAddNewRow = () => {
+    if (!canModify) return;
     if (records.some((r) => r.id < 0)) {
       triggerAlert("ישנה שורה חדשה שנמצאת כעת בעריכה. אנא שמרי או בטלי אותה תחילה!", "info", "שורה בעריכה");
       return;
@@ -1475,6 +1512,7 @@ export default function App() {
       year: "יג",
       teacherName: "",
       subject: "",
+      lessonName: "",
       semester: "שנתי",
       paymentMethod: "שכר מרצים",
       shash: 0,
@@ -1506,6 +1544,7 @@ export default function App() {
     setEditYear(row.year);
     setEditTeacherName(row.teacherName);
     setEditSubject(row.subject);
+    setEditLessonName(row.lessonName || "");
     setEditSemester(formatSemesterDisplay(row.semester));
     setEditPaymentMethod(row.paymentMethod);
     setEditShash(row.shash);
@@ -1524,6 +1563,7 @@ export default function App() {
 
   // Editing an EXISTING row opens the pop-up modal.
   const handleEditRowStart = (row: SalaryRecord) => {
+    if (!canModify) return;
     loadEditBuffers(row);
     setActiveEditingId(null);
     setEditModalId(row.id);
@@ -1540,8 +1580,9 @@ export default function App() {
 
   // Save changes to Postgres DB
   const handleSaveRow = async (id: number) => {
-    if (!editTeacherName.trim() || !editSubject.trim()) {
-      triggerAlert("חובה להזין את שם המורה ושם המקצוע על מנת לשמור!", "error", "פרטים חסרים");
+    if (!canModify) return;
+    if (!editTeacherName.trim() || !hasSubjectOrLesson(editSubject, editLessonName)) {
+      triggerAlert("חובה להזין את שם המורה ולפחות אחד מ: שם המקצוע / שם השעור!", "error", "פרטים חסרים");
       return;
     }
 
@@ -1565,6 +1606,7 @@ export default function App() {
       year: editYear,
       teacherName: editTeacherName.trim(),
       subject: editSubject.trim(),
+      lessonName: editLessonName.trim(),
       semester: editSemester,
       paymentMethod: editPaymentMethod,
       shash: editShash,
@@ -1960,8 +2002,9 @@ export default function App() {
         const query = searchQuery.toLowerCase();
         const matchName = (item.teacherName || "").toLowerCase().includes(query);
         const matchSubject = (item.subject || "").toLowerCase().includes(query);
+        const matchLesson = (item.lessonName || "").toLowerCase().includes(query);
         const matchTz = (item.tz || "").includes(query);
-        if (!matchName && !matchSubject && !matchTz) return false;
+        if (!matchName && !matchSubject && !matchLesson && !matchTz) return false;
       }
 
       return true;
@@ -2065,7 +2108,7 @@ export default function App() {
         : "שנתי";
       let rowDetail = "";
       if (row.paymentMethod === "תקן") {
-        rowDetail = `(${row.track}) ${row.shash} ש"ש ${row.subject}, כיתה ${row.year} – ${formattedSemester} בתעריף תקן`;
+        rowDetail = `(${row.track}) ${row.shash} ש"ש ${formatSubjectDisplay(row.subject, row.lessonName)}, כיתה ${row.year} – ${formattedSemester} בתעריף תקן`;
         hasTenure = true;
       } else {
         let pType = "בשכר מרצים";
@@ -2076,7 +2119,7 @@ export default function App() {
         } else {
           hasLecturer = true;
         }
-        rowDetail = `(${row.track}) ${row.totalHours} ש' ${row.subject}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${row.rate} ₪ ברוטו לשעה`;
+        rowDetail = `(${row.track}) ${row.totalHours} ש' ${formatSubjectDisplay(row.subject, row.lessonName)}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${row.rate} ₪ ברוטו לשעה`;
       }
       rowsDetails += `* ${rowDetail}\n`;
     });
@@ -2210,14 +2253,21 @@ ____________________                    _____________________                   
 
   const handleDownloadContract = () => {
     if (!activeContractRecord) return;
-    const blob = new Blob([generatedContractText], { type: "text/plain;charset=utf-8;" });
+    const html = `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8"><title>חוזה העסקה</title></head><body style="font-family:David, Arial, sans-serif; font-size:14pt; line-height:1.8; white-space:pre-wrap;">${generatedContractText
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")}</body></html>`;
+    const blob = new Blob(["\uFEFF", html], { type: "application/msword" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `חוזה_העסקה_${activeContractRecord.teacherName.replace(/\s+/g, "_")}_תשפז.txt`);
+    link.setAttribute(
+      "download",
+      `חוזה_העסקה_${activeContractRecord.teacherName.replace(/\s+/g, "_")}_תשפז.doc`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    triggerAlert("הקובץ הורד למחשבכן בהצלחה!", "success");
+    triggerAlert("קובץ Word הורד למחשבכן בהצלחה!", "success");
   };
 
   // CSV Exports
@@ -2259,7 +2309,7 @@ ____________________                    _____________________                   
       return;
     }
 
-    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,מחצית / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,נסיעות\n";
+    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,שם השעור,מחצית / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,נסיעות\n";
     let totalHoursSum = 0;
     let totalBudgetSum = 0;
 
@@ -2268,7 +2318,7 @@ ____________________                    _____________________                   
       const travelStr = item.travel || "בית שמש";
       const methodStr = `${item.paymentMethod} (${item.paymentMethod === "תקן" ? "+45%" : item.paymentMethod === "שכר מרצים" ? "+30%" : item.paymentMethod === "קבלה" ? "+18%" : "0%"})`;
 
-      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${formatSemesterDisplay(item.semester)}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${travelStr}"\n`;
+      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${item.lessonName || ""}","${formatSemesterDisplay(item.semester)}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${travelStr}"\n`;
 
       totalHoursSum += item.totalHours;
       totalBudgetSum += item.totalAnnual;
@@ -2449,6 +2499,27 @@ ____________________                    _____________________                   
                   <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors mr-2" />
                 </button>
 
+                {/* Viewer Entry Card */}
+                <button
+                  onClick={() => handleRoleSwitchInitiate("viewer")}
+                  className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-all duration-150 group text-right cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded bg-slate-100 text-slate-700 flex items-center justify-center group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors">
+                      <Eye className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="block font-semibold text-slate-800 text-sm">
+                        בית יעקב
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5 font-medium">
+                        צפייה בכל המערכת ללא אפשרות עריכה
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors mr-2" />
+                </button>
+
                 {/* Coordinator Entry Card */}
                 <button
                   onClick={() => handleRoleSwitchInitiate("coordinator")}
@@ -2535,6 +2606,16 @@ ____________________                    _____________________                   
                           מזכירה
                         </button>
                         <button
+                          onClick={() => handleRoleSwitchInitiate("viewer")}
+                          className={`px-3 py-1 rounded text-xs font-medium transition-all duration-150 cursor-pointer ${
+                            role === "viewer"
+                              ? "bg-white text-slate-900 border border-slate-200 shadow-sm font-semibold"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          בית יעקב
+                        </button>
+                        <button
                           onClick={() => handleRoleSwitchInitiate("coordinator")}
                           className={`px-3 py-1 rounded text-xs font-medium transition-all duration-150 cursor-pointer ${
                             role === "coordinator"
@@ -2568,7 +2649,11 @@ ____________________                    _____________________                   
                             className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-extrabold px-2.5 py-1 rounded border border-emerald-200 transition-all shadow-sm cursor-pointer flex items-center gap-1"
                           >
                             <ChartLine className="w-3 h-3" />
-                            {showExecutionView ? "חזרה לניהול תקציב 📋" : "דיווח וביצוע שעות 📊"}
+                            {showExecutionView
+                              ? "חזרה לניהול תקציב 📋"
+                              : role === "coordinator"
+                              ? "מצב מורות וניצול שעות 📊"
+                              : "דיווח וביצוע שעות 📊"}
                           </button>
                         )}
 
@@ -2803,9 +2888,11 @@ ____________________                    _____________________                   
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all text-slate-700 bg-white cursor-pointer font-semibold h-9"
                       >
                         <option value="all">כל השנים</option>
-                        <option value="יג">שנה יג</option>
-                        <option value="יד">שנה יד</option>
-                        <option value="יג+יד">שנה יג+יד</option>
+                        {YEAR_OPTIONS.map((yearOption) => (
+                          <option key={yearOption} value={yearOption}>
+                            {yearOption}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -2830,7 +2917,10 @@ ____________________                    _____________________                   
                   <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
                     <button
                       onClick={handleAddNewRow}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center h-9"
+                      disabled={!canModify}
+                      className={`bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 w-full sm:w-auto justify-center h-9 ${
+                        !canModify ? "opacity-50 pointer-events-none" : "cursor-pointer"
+                      }`}
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>הוספת שורה</span>
@@ -2974,6 +3064,7 @@ ____________________                    _____________________                   
                         <th className="p-2 w-[3%] text-center leading-tight bg-slate-200">שנה</th>
                         <th className="p-2 w-[8%] text-right leading-tight bg-slate-200">שם המורה</th>
                         <th className="p-2 w-[7%] text-right hidden md:table-cell leading-tight bg-slate-200">שם המקצוע</th>
+                        <th className="p-2 w-[7%] text-right hidden md:table-cell leading-tight bg-slate-200">שם השעור</th>
                         <th className="p-2 w-[6%] text-right leading-tight hidden lg:table-cell bg-slate-200">מחצית / מחזור</th>
                         <th className="p-2 w-[7%] text-center hidden lg:table-cell leading-tight bg-slate-200">צורת תשלום</th>
                         <th className="p-2 text-center w-[3%] leading-tight bg-slate-200">ש"ש</th>
@@ -2993,7 +3084,7 @@ ____________________                    _____________________                   
                     <tbody className="divide-y divide-slate-100 text-[11px]">
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={19} className="text-center py-12 text-slate-400 font-bold">
+                          <td colSpan={20} className="text-center py-12 text-slate-400 font-bold">
                             לא נמצאו משרות העונות על פילוח הסינון הנוכחי.
                           </td>
                         </tr>
@@ -3005,7 +3096,7 @@ ____________________                    _____________________                   
                           if (item.id === activeEditingId && item.id < 0) {
                             return (
                               <tr key={item.id} className="bg-emerald-50/60">
-                                <td colSpan={19} className="p-4 border-b-2 border-emerald-200">
+                                <td colSpan={20} className="p-4 border-b-2 border-emerald-200">
                                   <div className="flex items-center gap-2 mb-3">
                                     <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
                                       <Plus className="w-3.5 h-3.5" />
@@ -3025,12 +3116,22 @@ ____________________                    _____________________                   
                                       />
                                     </div>
                                     <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם המקצוע *</label>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם המקצוע</label>
                                       <input
                                         type="text"
                                         value={editSubject}
                                         onChange={(e) => setEditSubject(e.target.value)}
-                                        placeholder="פסיכולוגיה"
+                                        placeholder="קריאה"
+                                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם השעור</label>
+                                      <input
+                                        type="text"
+                                        value={editLessonName}
+                                        onChange={(e) => setEditLessonName(e.target.value)}
+                                        placeholder="שיטת קריאה 1"
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                                       />
                                     </div>
@@ -3055,9 +3156,9 @@ ____________________                    _____________________                   
                                         onChange={(e) => setEditYear(e.target.value)}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-600 bg-white"
                                       >
-                                        <option value="יג">יג</option>
-                                        <option value="יד">יד</option>
-                                        <option value="יג+יד">יג+יד</option>
+                                        {YEAR_OPTIONS.map((yearOption) => (
+                                          <option key={yearOption} value={yearOption}>{yearOption}</option>
+                                        ))}
                                       </select>
                                     </div>
                                     <div>
@@ -3257,6 +3358,22 @@ ____________________                    _____________________                   
                                         טיוטה 🔒
                                       </button>
                                     )
+                                  ) : role === "viewer" ? (
+                                    item.isApproved ? (
+                                      <button
+                                        onClick={() => {
+                                          setActiveContractRecord(item);
+                                          setShowContractModal(true);
+                                        }}
+                                        className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 font-bold text-[10px] px-2 py-1 rounded-lg shadow-sm cursor-pointer transition w-full max-w-[108px] text-center flex items-center justify-center gap-1 mx-auto"
+                                      >
+                                        <Eye className="w-3 h-3" /> צפייה בחוזה
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 font-bold leading-tight">
+                                        ממתין לאישור מנהלת
+                                      </span>
+                                    )
                                   ) : role === "secretary" ? (
                                     item.isApproved ? (
                                       <button
@@ -3319,6 +3436,9 @@ ____________________                    _____________________                   
                               </td>
                               <td className="p-1.5 border-b border-slate-100 font-medium text-slate-800 align-middle hidden md:table-cell">
                                 <AutoFitCellText className="font-medium text-slate-800">{item.subject || "—"}</AutoFitCellText>
+                              </td>
+                              <td className="p-1.5 border-b border-slate-100 font-medium text-slate-700 align-middle hidden md:table-cell">
+                                <AutoFitCellText className="font-medium text-slate-700">{item.lessonName || "—"}</AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell">
                                 <AutoFitCellText maxLines={2} className="text-slate-600">
@@ -3404,7 +3524,9 @@ ____________________                    _____________________                   
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-center align-middle bg-slate-50/30">
                                 <div className="flex items-center justify-center gap-1 flex-wrap">
-                                  {item.isApproved && role === "coordinator" ? (
+                                  {!canModify ? (
+                                    <span className="text-[10px] text-slate-400 font-bold">צפייה בלבד</span>
+                                  ) : item.isApproved && role === "coordinator" ? (
                                     <>
                                       <button
                                         onClick={() => openSimulatorModal(item)}
@@ -3564,13 +3686,15 @@ ____________________                    _____________________                   
                         משרת תקן (חודשי)
                       </h4>
                       <p className="text-[11px] text-slate-500 leading-relaxed mb-3 font-normal">
-                        עלות המעביד כוללת תוספת של <strong>45%</strong>. החישוב הוא ש"ש × מפג׳/חודשים × תעריף לשעה,
-                        ללא קביעה קבועה של 30 שבועות — בין אם התעריף חודשי או שבועי.
+                        עלות המעביד כוללת תוספת של <strong>45%</strong>. שעות שנתיות לתלמידות = ש"ש × 30.
+                        סה"כ שנתי = שעות שנתיות × עלות מעביד לשעה (תעריף × 1.45).
                       </p>
                       <div className="bg-emerald-50/50 p-2.5 rounded border border-emerald-100/50 text-[10px] font-mono text-emerald-950 leading-relaxed">
-                        סה"כ שנתי שכר = ש"ש × מפג׳ × תעריף לשעה × 1.45
+                        שעות שנתיות לתלמידות = ש"ש × 30
                         <br />
                         עלות מעביד לשעה = תעריף לשעה × 1.45
+                        <br />
+                        סה"כ שנתי שכר = שעות שנתיות × עלות מעביד לשעה
                       </div>
                     </div>
 
@@ -3634,18 +3758,18 @@ ____________________                    _____________________                   
               </div>
               </>
               ) : (
-              /* Execution reporting view — secretary: all tracks; coordinator: own track only */
+              /* Teacher status and execution view — coordinator is read-only and limited to own track */
               <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-200 mb-8">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b gap-4">
                   <div>
                     <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                       <ChartLine className="w-6 h-6 text-emerald-600" />
-                      מערכת דיווח חודשי וביצוע שעות
+                      {role === "coordinator" ? "מצב מורות וניצול שעות" : "מערכת דיווח חודשי וביצוע שעות"}
                       {role === "coordinator" && activeTrack ? ` · מסלול ${activeTrack}` : ""}
                     </h2>
                     <p className="text-xs text-slate-400 mt-1">
                       {role === "coordinator"
-                        ? `רכזת מסלול ${activeTrack || ""} — רק מורות המסלול (שכר מרצים / קבלה), ללא מורות תקן.`
+                        ? `צפייה בלבד בכל מורות מסלול ${activeTrack || ""}, במצב האישור ובניצול השעות שלהן.`
                         : "המזכירה האחראית עוקבת ומעדכנת כאן שעות ביצוע מדווחות בפועל מול שעות שהוקצו (שכר מרצים / קבלה)."}
                     </p>
                   </div>
@@ -3671,21 +3795,23 @@ ____________________                    _____________________                   
                       <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                         <th className="p-3">שם המורה</th>
                         <th className="p-3">שם המקצוע</th>
+                        <th className="p-3 text-center">מצב המורה</th>
                         <th className="p-3 text-center bg-emerald-50/50">שעות שהוקצו</th>
                         <th className="p-3 text-center bg-emerald-50/50">תעריף</th>
                         {MONTH_LABELS.map((label) => (
                           <th key={label} className="p-2 text-center w-12">{label}</th>
                         ))}
                         <th className="p-3 text-center bg-emerald-50">שעות שבוצעו</th>
+                        <th className="p-3 text-center bg-sky-50">אחוז ניצול</th>
                         <th className="p-3 text-center bg-amber-50">יתרת שעות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {executionRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={16} className="text-center py-10 text-slate-400 font-bold">
+                          <td colSpan={18} className="text-center py-10 text-slate-400 font-bold">
                             {role === "coordinator"
-                              ? `אין מורות לדיווח ביצוע במסלול ${activeTrack || ""} כרגע.`
+                              ? `אין מורות במסלול ${activeTrack || ""} כרגע.`
                               : "אין מורות לדיווח ביצוע (שכר מרצים / קבלה) במערכת כרגע."}
                           </td>
                         </tr>
@@ -3696,25 +3822,48 @@ ____________________                    _____________________                   
                             const allocated = item.totalHours || 0;
                             const remaining = allocated - totalDone;
                             const isOver = remaining < 0;
+                            const utilization = allocated > 0 ? Math.round((totalDone / allocated) * 100) : 0;
+                            const isTenure = item.paymentMethod === "תקן";
                             return (
                               <tr key={item.id} className={isOver ? "bg-rose-50/80" : remaining === 0 ? "bg-emerald-50/50" : "hover:bg-slate-50"}>
                                 <td className="p-3 font-bold">{item.teacherName}<span className="text-[10px] text-slate-400 block">{item.track} · {item.paymentMethod}</span></td>
                                 <td className="p-3 text-slate-600 truncate max-w-[150px]">{item.subject}</td>
+                                <td className="p-3 text-center">
+                                  <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-black ${
+                                    item.isContractReady
+                                      ? "bg-sky-100 text-sky-800"
+                                      : item.isApproved
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-amber-100 text-amber-800"
+                                  }`}>
+                                    {item.isContractReady ? "חוזה מוכן" : item.isApproved ? "מאושרת" : "ממתינה לאישור"}
+                                  </span>
+                                </td>
                                 <td className="p-3 text-center bg-emerald-50/30 font-black">{allocated} ש'</td>
                                 <td className="p-3 text-center bg-emerald-50/30 font-bold">₪{item.rate}</td>
                                 {MONTH_KEYS.map((m) => (
                                   <td key={m} className="p-1 text-center">
-                                    <input
-                                      type="text"
-                                      value={monthly[m] !== undefined ? monthly[m] : 0}
-                                      onChange={(e) => updateMonthlyHourValue(item.id, m, e.target.value)}
-                                      className="w-10 text-center text-xs font-bold border border-slate-200 rounded p-1 focus:outline-none focus:border-emerald-500 bg-white"
-                                    />
+                                    {isTenure ? (
+                                      <span className="text-slate-300">—</span>
+                                    ) : (
+                                      <input
+                                        type="text"
+                                        value={monthly[m] !== undefined ? monthly[m] : 0}
+                                        onChange={(e) => updateMonthlyHourValue(item.id, m, e.target.value)}
+                                        readOnly={role === "coordinator"}
+                                        className={`w-10 text-center text-xs font-bold border border-slate-200 rounded p-1 focus:outline-none ${
+                                          role === "coordinator"
+                                            ? "bg-slate-50 text-slate-600 cursor-default"
+                                            : "bg-white focus:border-emerald-500"
+                                        }`}
+                                      />
+                                    )}
                                   </td>
                                 ))}
-                                <td className="p-3 text-center bg-emerald-50 font-black">{totalDone} ש'</td>
+                                <td className="p-3 text-center bg-emerald-50 font-black">{isTenure ? "לא רלוונטי" : `${totalDone} ש'`}</td>
+                                <td className="p-3 text-center bg-sky-50 font-black">{isTenure ? "—" : `${utilization}%`}</td>
                                 <td className={`p-3 text-center font-black ${isOver ? "text-rose-700 bg-rose-100" : "bg-slate-100"}`}>
-                                  {remaining} ש'
+                                  {isTenure ? "—" : `${remaining} ש'`}
                                 </td>
                               </tr>
                             );
@@ -3745,6 +3894,8 @@ ____________________                    _____________________                   
                 ? "אנא הזני סיסמת מנהלת סמינר"
                 : pendingRoleSwitch === "secretary"
                 ? "אנא הזני סיסמת מזכירה"
+                : pendingRoleSwitch === "viewer"
+                ? "אנא הזיני סיסמת בית יעקב"
                 : `אנא הזני סיסמת רכזת עבור מסלול ${pendingTrackSwitch}`}
             </p>
 
@@ -3974,8 +4125,9 @@ ____________________                    _____________________                   
                 onClick={handleDownloadContract}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm"
               >
-                <Download className="w-4 h-4" /> הורדה כקובץ טקסט
+                <Download className="w-4 h-4" /> הורדה כקובץ Word
               </button>
+              {role === "secretary" && (
               <button
                 onClick={handleToggleContractStatus}
                 className={`text-white font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 h-9 shadow-sm ${
@@ -3987,6 +4139,7 @@ ____________________                    _____________________                   
                 <CheckCircle2 className="w-4 h-4" />
                 {activeContractRecord.isContractReady ? "ביטול סימון חוזה" : "סמני כהוכן 📜"}
               </button>
+              )}
               <button
                 onClick={() => setShowContractModal(false)}
                 className="flex-grow sm:flex-none bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-medium py-1.5 px-4 rounded-lg text-xs transition cursor-pointer h-9 shadow-sm"
@@ -4275,19 +4428,30 @@ ____________________                    _____________________                   
                       onChange={(e) => setEditYear(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                     >
-                      <option value="יג">שנה יג</option>
-                      <option value="יד">שנה יד</option>
-                      <option value="יג+יד">שנה יג+יד</option>
+                      {YEAR_OPTIONS.map((yearOption) => (
+                        <option key={yearOption} value={yearOption}>{yearOption}</option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המקצוע *</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המקצוע</label>
                     <input
                       type="text"
-                      placeholder="לדוגמה: פסיכולוגיה התפתחותית"
+                      placeholder="לדוגמה: קריאה"
                       value={editSubject}
                       onChange={(e) => setEditSubject(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם השעור</label>
+                    <input
+                      type="text"
+                      placeholder="לדוגמה: שיטת קריאה 1"
+                      value={editLessonName}
+                      onChange={(e) => setEditLessonName(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                     />
                   </div>
@@ -4490,6 +4654,10 @@ ____________________                    _____________________                   
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המקצוע</label>
                   <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם השעור</label>
+                  <input type="text" value={simLessonName} onChange={(e) => setSimLessonName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">מחצית / מחזור</label>

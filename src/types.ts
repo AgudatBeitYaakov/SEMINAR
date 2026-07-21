@@ -9,6 +9,7 @@ export interface SalaryRecord {
   year: string;
   teacherName: string;
   subject: string;
+  lessonName?: string;
   semester: string;
   paymentMethod: string;
   shash: number;
@@ -27,7 +28,7 @@ export interface SalaryRecord {
   monthlyHours?: Record<string, number>;
 }
 
-export type UserRole = 'guest' | 'director' | 'secretary' | 'coordinator';
+export type UserRole = 'guest' | 'director' | 'secretary' | 'coordinator' | 'viewer';
 
 export interface AuthState {
   role: UserRole;
@@ -39,6 +40,7 @@ export type CoordinatorEmails = Record<string, string>;
 export interface ChangeRequestSnapshot {
   teacherName: string;
   subject: string;
+  lessonName?: string;
   semester: string;
   paymentMethod: string;
   shash: number;
