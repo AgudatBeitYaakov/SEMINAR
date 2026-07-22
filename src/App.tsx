@@ -256,8 +256,21 @@ ${content.teachingRequirement}
 ____________________                    _____________________                   ______________________
      האגודה                                    המנהלת                                  ${content.suffixSigned}`;
 
-const contractPlainTextToWordHtml = (plainText: string, teacherName: string) =>
-  `<!DOCTYPE html>
+const preserveLineSpacesForWord = (line: string) =>
+  escapeHtml(line).replace(/ {2,}/g, (spaces) => "\u00A0".repeat(spaces.length));
+
+const contractPlainTextToWordHtml = (plainText: string, teacherName: string) => {
+  const linesHtml = plainText
+    .split("\n")
+    .map((line) => {
+      if (line.trim() === "") {
+        return `<p class="contract-line contract-gap">&nbsp;</p>`;
+      }
+      return `<p class="contract-line">${preserveLineSpacesForWord(line)}</p>`;
+    })
+    .join("");
+
+  return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
       xmlns="http://www.w3.org/TR/REC-html40"
@@ -272,29 +285,44 @@ const contractPlainTextToWordHtml = (plainText: string, teacherName: string) =>
   <w:View>Print</w:View>
   <w:Zoom>100</w:Zoom>
   <w:DoNotOptimizeForBrowser/>
+  <w:BiDiVisual/>
 </w:WordDocument>
 </xml><![endif]-->
 <style>
-  @page { size: A4; margin: 2.5cm 2cm; }
-  body {
-    font-family: David, Arial, sans-serif;
-    font-size: 12pt;
-    line-height: 1.8;
-    direction: rtl;
-    text-align: right;
-    color: #334155;
+  @page Section1 {
+    size: 595.3pt 841.9pt;
+    margin: 72pt 56pt 72pt 56pt;
   }
-  .contract-body {
-    white-space: pre-wrap;
-    font-family: David, Arial, sans-serif;
+  div.Section1 { page: Section1; }
+  body {
+    direction: rtl;
+    unicode-bidi: embed;
+    font-family: David, Miriam, Arial, sans-serif;
     font-size: 12pt;
-    line-height: 1.8;
+    color: #334155;
     margin: 0;
+  }
+  p.contract-line {
+    margin: 0 0 2pt 0;
+    line-height: 18pt;
+    mso-line-height-rule: exactly;
+    text-align: right;
+    direction: rtl;
+    font-family: David, Miriam, Arial, sans-serif;
+    font-size: 12pt;
+  }
+  p.contract-gap {
+    margin: 0 0 8pt 0;
+    line-height: 8pt;
+    mso-line-height-rule: exactly;
   }
 </style>
 </head>
-<body><div class="contract-body">${escapeHtml(plainText)}</div></body>
+<body>
+<div class="Section1">${linesHtml}</div>
+</body>
 </html>`;
+};
 
 const formatGradeTimingDisplay = (gradeTiming?: string) => {
   if (!gradeTiming || gradeTiming.includes("ללא ציון")) return "";
