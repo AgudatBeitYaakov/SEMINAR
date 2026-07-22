@@ -88,19 +88,64 @@ const GRADE_TIMING_OPTIONS = [
   "ללא ציון",
 ];
 
-const YEAR_OPTIONS = [
+/** מנרמל שם מסלול להשוואה יציבה (מרכאות/רווחים שונים) */
+const normalizeTrack = (track: string) =>
+  (track || "")
+    .trim()
+    .replace(/[״"''׳]/g, '"')
+    .replace(/\s+/g, " ");
+
+const YEAR_OPTIONS_KODESH = [
   "יג1",
   "יג2",
   "יד1",
   "יד2",
-  "יד",
-  "יג",
   "יד1+יד2",
   "הוראה יג",
   "הוראה יד",
   "כל הסמינר",
   "יג1+יג2",
 ];
+
+const YEAR_OPTIONS_STANDARD = ["יג", "יד", "יג+יד"];
+
+const ALL_YEAR_OPTIONS = [...YEAR_OPTIONS_KODESH, ...YEAR_OPTIONS_STANDARD];
+
+const isKodeshTrack = (track: string) => normalizeTrack(track) === normalizeTrack("קודש");
+
+const getYearOptionsForTrack = (track: string) =>
+  isKodeshTrack(track) ? YEAR_OPTIONS_KODESH : YEAR_OPTIONS_STANDARD;
+
+const getDefaultYearForTrack = (track: string) =>
+  isKodeshTrack(track) ? "יג1" : "יג";
+
+const getYearSortIndex = (year: string, track: string) => {
+  const options = getYearOptionsForTrack(track);
+  const idx = options.indexOf(year);
+  return idx >= 0 ? idx : options.length + year.localeCompare("", "he");
+};
+
+const getSemesterSortOrder = (semester: string) => {
+  const s = (semester || "").replace(/סמסטר/g, "מחצית");
+  if (s.includes("מחצית א'") || s.includes("במחצית א'")) return 0;
+  if (s.includes("מחצית ב'") || s.includes("במחצית ב'")) return 1;
+  if (s.includes("שנתי")) return 2;
+  return 3;
+};
+
+const getTrackSortIndex = (track: string) => {
+  const idx = ALL_TRACKS.findIndex((t) => normalizeTrack(t) === normalizeTrack(track));
+  return idx >= 0 ? idx : ALL_TRACKS.length;
+};
+
+const sortRecordsForFinalReport = (rows: SalaryRecord[]) =>
+  [...rows].sort((a, b) => {
+    const byTrack = getTrackSortIndex(a.track) - getTrackSortIndex(b.track);
+    if (byTrack !== 0) return byTrack;
+    const byYear = getYearSortIndex(a.year, a.track) - getYearSortIndex(b.year, b.track);
+    if (byYear !== 0) return byYear;
+    return getSemesterSortOrder(a.semester) - getSemesterSortOrder(b.semester);
+  });
 
 const formatSubjectDisplay = (subject: string) => (subject || "").trim() || "—";
 
@@ -366,13 +411,6 @@ const formatGradeTimingDisplay = (gradeTiming?: string) => {
   if (!gradeTiming || gradeTiming.includes("ללא ציון")) return "";
   return gradeTiming.replace(/סמסטר/g, "מחצית").replace(" (סדנה/ערב)", "");
 };
-
-/** מנרמל שם מסלול להשוואה יציבה (מרכאות/רווחים שונים) */
-const normalizeTrack = (track: string) =>
-  (track || "")
-    .trim()
-    .replace(/[״"''׳]/g, '"')
-    .replace(/\s+/g, " ");
 
 /** דיווח ביצוע חודשי: כל צורות התשלום מלבד תקן */
 const isExecutionEligible = (paymentMethod: string) =>
@@ -1728,7 +1766,7 @@ export default function App() {
     const newRow: SalaryRecord = {
       id: tempId,
       track: initialTrack,
-      year: "יג",
+      year: getDefaultYearForTrack(initialTrack),
       teacherName: "",
       subject: "",
       semester: "שנתי",
@@ -2290,6 +2328,34 @@ export default function App() {
     });
   }, [records, role, activeTrack, filterTrack, filterJobType, filterYear, filterStatus, searchQuery]);
 
+  const yearFilterOptions = useMemo(() => {
+    if (role === "coordinator" && activeTrack) {
+      return getYearOptionsForTrack(activeTrack);
+    }
+    if (filterTrack !== "all") {
+      return getYearOptionsForTrack(filterTrack);
+    }
+    return ALL_YEAR_OPTIONS;
+  }, [role, activeTrack, filterTrack]);
+
+  const yearEditOptions = useMemo(() => getYearOptionsForTrack(editTrack), [editTrack]);
+
+  const finalReportRecords = useMemo(
+    () => sortRecordsForFinalReport(filteredRecords),
+    [filteredRecords]
+  );
+
+  useEffect(() => {
+    if (filterYear !== "all" && !yearFilterOptions.includes(filterYear)) {
+      setFilterYear("all");
+    }
+  }, [filterYear, yearFilterOptions]);
+
+  useEffect(() => {
+    const options = getYearOptionsForTrack(editTrack);
+    setEditYear((current) => (options.includes(current) ? current : options[0]));
+  }, [editTrack]);
+
   /** כל המסלולים לסינון — כולל מסלולים קיימים בנתונים גם אם אינם ברשימה הקבועה */
   const trackFilterOptions = useMemo(() => {
     const fromData = records.map((r) => r.track).filter(Boolean);
@@ -2495,7 +2561,7 @@ export default function App() {
   };
 
   const handleExportToExcel = () => {
-    if (filteredRecords.length === 0) {
+    if (finalReportRecords.length === 0) {
       triggerAlert("אין נתונים בטבלה לייצוא אקסל!", "info");
       return;
     }
@@ -2504,7 +2570,7 @@ export default function App() {
     let totalHoursSum = 0;
     let totalBudgetSum = 0;
 
-    filteredRecords.forEach((item) => {
+    finalReportRecords.forEach((item) => {
       const statusStr = item.isApproved ? "מאושר לתשלום" : "ממתין לאישור";
       const travelStr = item.travel || "בית שמש";
       const methodStr = `${item.paymentMethod} (${item.paymentMethod === "תקן" ? "+45%" : item.paymentMethod === "שכר מרצים" ? "+30%" : item.paymentMethod === "קבלה" ? "+18%" : "0%"})`;
@@ -3079,7 +3145,7 @@ export default function App() {
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 transition-all text-slate-700 bg-white cursor-pointer font-semibold h-9"
                       >
                         <option value="all">כל השנים</option>
-                        {YEAR_OPTIONS.map((yearOption) => (
+                        {yearFilterOptions.map((yearOption) => (
                           <option key={yearOption} value={yearOption}>
                             {yearOption}
                           </option>
@@ -3348,7 +3414,7 @@ export default function App() {
                                         onChange={(e) => setEditYear(e.target.value)}
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-600 bg-white"
                                       >
-                                        {YEAR_OPTIONS.map((yearOption) => (
+                                        {yearEditOptions.map((yearOption) => (
                                           <option key={yearOption} value={yearOption}>{yearOption}</option>
                                         ))}
                                       </select>
@@ -4351,7 +4417,7 @@ export default function App() {
                   <span>ריכוז דוח שכר ותקציב סופי - תשפ"ז</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  מציג <strong>{filteredRecords.length}</strong> משרות מסוננות בהתאם לפילוח הנבחר.
+                  מציג <strong>{finalReportRecords.length}</strong> משרות — ממוין לפי מסלול, שנה, ומחצית (א׳ ואז ב׳).
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -4404,7 +4470,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {filteredRecords.map((item) => (
+                  {finalReportRecords.map((item) => (
                     <tr
                       key={item.id}
                       className={`text-slate-800 transition-colors ${
@@ -4466,12 +4532,12 @@ export default function App() {
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-amber-50 text-amber-950 font-bold text-xs">
-                      {filteredRecords.reduce((sum, r) => sum + r.totalHours, 0).toLocaleString()}
+                      {finalReportRecords.reduce((sum, r) => sum + r.totalHours, 0).toLocaleString()}
                     </td>
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-emerald-100/50 text-emerald-950 font-bold text-sm">
-                      ₪{filteredRecords.reduce((sum, r) => sum + r.totalAnnual, 0).toLocaleString()}
+                      ₪{finalReportRecords.reduce((sum, r) => sum + r.totalAnnual, 0).toLocaleString()}
                     </td>
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
                     <td className="border border-slate-200 p-3 text-center bg-slate-100" />
@@ -4617,7 +4683,7 @@ export default function App() {
                       onChange={(e) => setEditYear(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                     >
-                      {YEAR_OPTIONS.map((yearOption) => (
+                      {yearEditOptions.map((yearOption) => (
                         <option key={yearOption} value={yearOption}>{yearOption}</option>
                       ))}
                     </select>
