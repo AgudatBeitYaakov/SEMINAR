@@ -95,7 +95,7 @@ const normalizeTrack = (track: string) =>
     .replace(/[״"''׳]/g, '"')
     .replace(/\s+/g, " ");
 
-const YEAR_OPTIONS_KODESH = [
+const YEAR_OPTIONS_DETAILED = [
   "יג1",
   "יג2",
   "יד1",
@@ -109,15 +109,20 @@ const YEAR_OPTIONS_KODESH = [
 
 const YEAR_OPTIONS_STANDARD = ["יג", "יד", "יג+יד"];
 
-const ALL_YEAR_OPTIONS = [...YEAR_OPTIONS_KODESH, ...YEAR_OPTIONS_STANDARD];
+const ALL_YEAR_OPTIONS = [...YEAR_OPTIONS_DETAILED, ...YEAR_OPTIONS_STANDARD];
 
-const isKodeshTrack = (track: string) => normalizeTrack(track) === normalizeTrack("קודש");
+const isDetailedYearTrack = (track: string) => {
+  const normalized = normalizeTrack(track);
+  return (
+    normalized === normalizeTrack("קודש") || normalized === normalizeTrack("חובה")
+  );
+};
 
 const getYearOptionsForTrack = (track: string) =>
-  isKodeshTrack(track) ? YEAR_OPTIONS_KODESH : YEAR_OPTIONS_STANDARD;
+  isDetailedYearTrack(track) ? YEAR_OPTIONS_DETAILED : YEAR_OPTIONS_STANDARD;
 
 const getDefaultYearForTrack = (track: string) =>
-  isKodeshTrack(track) ? "יג1" : "יג";
+  isDetailedYearTrack(track) ? "יג1" : "יג";
 
 const getYearSortIndex = (year: string, track: string) => {
   const options = getYearOptionsForTrack(track);
