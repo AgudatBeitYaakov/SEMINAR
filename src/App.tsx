@@ -256,58 +256,7 @@ ${content.teachingRequirement}
 ____________________                    _____________________                   ______________________
      האגודה                                    המנהלת                                  ${content.suffixSigned}`;
 
-const buildContractHtmlBody = (content: ContractContent) => {
-  const rowsHtml = content.rowDetails
-    .map((row) => `<li style="margin-bottom:6px;">${escapeHtml(row)}</li>`)
-    .join("");
-
-  return `
-    <h1 style="text-align:center;font-size:18pt;font-weight:bold;margin:0 0 10px;color:#0f172a;">הסכם העסקה אישי</h1>
-    <p style="text-align:center;margin:0 0 28px;color:#475569;">שנערך ונחתם בתל אביב _______ ביום _________ בחודש ____ שנת ______</p>
-
-    <p style="text-align:center;font-weight:bold;margin:18px 0 8px;color:#0f172a;">בין:</p>
-    <p style="text-align:center;margin:0;line-height:1.8;">
-      אגודת בית יעקב (ע"ר)<br/>
-      מספר עמותה: 580052306, מרחוב ר' יצחק אלחנן 4, תל אביב<br/>
-      (להלן: "העמותה")
-    </p>
-    <p style="text-align:center;font-weight:bold;margin:14px 0;color:#64748b;">— מצד אחד —</p>
-
-    <p style="text-align:center;font-weight:bold;margin:18px 0 8px;color:#0f172a;">לבין:</p>
-    <p style="text-align:center;margin:0;line-height:1.8;">
-      <strong>${escapeHtml(content.prefix)} ${escapeHtml(content.teacherName)}</strong><br/>
-      נושא/ת ת.ז. ${escapeHtml(content.tz)}<br/>
-      (להלן: "${escapeHtml(content.pronounTeacher)}")
-    </p>
-    <p style="text-align:center;font-weight:bold;margin:14px 0;color:#64748b;">— מצד שני —</p>
-
-    <p style="text-align:justify;margin:22px 0;line-height:1.8;">
-      העבודה מתבצעת מול הסמינר בעיר בית שמש, התשלום הוא ע"י אגודת "בית יעקב".
-    </p>
-
-    <p style="font-weight:bold;margin:20px 0 10px;color:#0f766e;">סוכם לשנה"ל תשפ"ז:</p>
-    <ul style="margin:0 0 18px 0;padding-right:28px;line-height:1.8;">${rowsHtml}</ul>
-
-    <hr style="border:none;border-top:1px solid #cbd5e1;margin:22px 0;" />
-
-    <p style="text-align:justify;margin:12px 0;line-height:1.8;">${escapeHtml(content.commitmentLine)}</p>
-    <p style="text-align:justify;margin:12px 0;line-height:1.8;">
-      ${escapeHtml(content.prefixSheHe)} למוסד לרשום את כל אחוזי ${escapeHtml(content.pronounSuffix)} במצבת המורים למשרד החינוך
-      ו${escapeHtml(content.suffixHeShe)} מעל 140% משרה בכל מקומות ${escapeHtml(content.suffixWorkHeShe)}.
-    </p>
-    <p style="text-align:justify;margin:12px 0 28px;line-height:1.8;">${escapeHtml(content.teachingRequirement)}</p>
-
-    <table style="width:100%;margin-top:40px;border-collapse:collapse;table-layout:fixed;">
-      <tr>
-        <td style="width:33%;text-align:center;padding-top:36px;border-top:1px solid #0f172a;font-weight:600;">האגודה</td>
-        <td style="width:33%;text-align:center;padding-top:36px;border-top:1px solid #0f172a;font-weight:600;">המנהלת</td>
-        <td style="width:33%;text-align:center;padding-top:36px;border-top:1px solid #0f172a;font-weight:600;">${escapeHtml(content.suffixSigned)}</td>
-      </tr>
-    </table>
-  `;
-};
-
-const contractContentToWordHtml = (content: ContractContent) =>
+const contractPlainTextToWordHtml = (plainText: string, teacherName: string) =>
   `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
@@ -317,7 +266,7 @@ const contractContentToWordHtml = (content: ContractContent) =>
 <meta charset="utf-8">
 <meta name="ProgId" content="Word.Document">
 <meta name="Generator" content="Microsoft Word">
-<title>חוזה העסקה - ${escapeHtml(content.teacherName)}</title>
+<title>חוזה העסקה - ${escapeHtml(teacherName)}</title>
 <!--[if gte mso 9]><xml>
 <w:WordDocument>
   <w:View>Print</w:View>
@@ -328,18 +277,23 @@ const contractContentToWordHtml = (content: ContractContent) =>
 <style>
   @page { size: A4; margin: 2.5cm 2cm; }
   body {
-    font-family: David, "Times New Roman", serif;
+    font-family: David, Arial, sans-serif;
     font-size: 12pt;
-    line-height: 1.75;
+    line-height: 1.8;
     direction: rtl;
     text-align: right;
-    color: #1a1a1a;
+    color: #334155;
   }
-  h1 { font-family: David, "Times New Roman", serif; }
-  ul { list-style-type: disc; }
+  .contract-body {
+    white-space: pre-wrap;
+    font-family: David, Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.8;
+    margin: 0;
+  }
 </style>
 </head>
-<body>${buildContractHtmlBody(content)}</body>
+<body><div class="contract-body">${escapeHtml(plainText)}</div></body>
 </html>`;
 
 const formatGradeTimingDisplay = (gradeTiming?: string) => {
@@ -2312,11 +2266,6 @@ export default function App() {
     return contractContentToPlainText(contractContent);
   }, [contractContent]);
 
-  const generatedContractHtml = useMemo(() => {
-    if (!contractContent) return "";
-    return buildContractHtmlBody(contractContent);
-  }, [contractContent]);
-
   // Handle marking contract as ready for all teacher's rows
   const handleToggleContractStatus = async () => {
     if (!activeContractRecord) return;
@@ -2399,8 +2348,8 @@ export default function App() {
   };
 
   const handleDownloadContract = () => {
-    if (!activeContractRecord || !contractContent) return;
-    const html = contractContentToWordHtml(contractContent);
+    if (!activeContractRecord || !generatedContractText) return;
+    const html = contractPlainTextToWordHtml(generatedContractText, activeContractRecord.teacherName);
     const blob = new Blob(["\uFEFF", html], { type: "application/msword" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -4254,10 +4203,9 @@ export default function App() {
               </button>
             </div>
 
-            <div
-              className="flex-grow overflow-y-auto bg-white p-6 rounded-lg border border-slate-200 text-sm text-slate-800 leading-relaxed select-all [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-slate-900 [&_ul]:list-disc [&_ul]:pr-6"
-              dangerouslySetInnerHTML={{ __html: generatedContractHtml }}
-            />
+            <div className="flex-grow overflow-y-auto bg-slate-50 p-4 rounded-lg border border-slate-200 font-sans text-xs text-slate-700 whitespace-pre-wrap leading-relaxed select-all">
+              {generatedContractText}
+            </div>
 
             <div className="flex flex-wrap gap-2 mt-5">
               <button
