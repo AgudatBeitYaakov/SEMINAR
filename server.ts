@@ -870,7 +870,7 @@ async function saveRecord(item: any) {
           `INSERT INTO salary_records 
            (track, year, teacher_name, subject, lesson_name, semester, payment_method, shash, meetings, total_hours, rate, employer_overhead, total_annual, tz, phone, email, is_approved, is_contract_ready, travel, grade_timing, monthly_hours)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-           RETURNING id`,
+           RETURNING *`,
           [
             item.track, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
@@ -878,7 +878,33 @@ async function saveRecord(item: any) {
             item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
           ]
         );
-        return { ...item, id: res.rows[0].id };
+        if (res.rows.length > 0) {
+          const row = res.rows[0];
+          return {
+            id: row.id,
+            track: row.track,
+            year: row.year,
+            teacherName: row.teacher_name,
+            subject: row.subject,
+            lessonName: row.lesson_name || "",
+            semester: row.semester,
+            paymentMethod: row.payment_method,
+            shash: Number(row.shash),
+            meetings: row.meetings,
+            totalHours: row.total_hours,
+            rate: Number(row.rate),
+            employerOverhead: Number(row.employer_overhead),
+            totalAnnual: Number(row.total_annual),
+            tz: row.tz,
+            phone: row.phone,
+            email: row.email,
+            isApproved: row.is_approved,
+            isContractReady: row.is_contract_ready,
+            travel: row.travel || "בית שמש",
+            gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
+            monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
+          };
+        }
       }
     } catch (err) {
       console.error("Error saving to Postgres direct, trying Supabase fallback or local:", err);
