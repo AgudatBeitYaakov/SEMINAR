@@ -102,14 +102,37 @@ const YEAR_OPTIONS = [
   "יג1+יג2",
 ];
 
-const hasSubjectOrLesson = (subject: string, lessonName?: string) =>
-  Boolean((subject || "").trim() || (lessonName || "").trim());
+const formatSubjectDisplay = (subject: string) => (subject || "").trim() || "—";
 
-const formatSubjectDisplay = (subject: string, lessonName?: string) => {
-  const subjectText = (subject || "").trim();
-  const lessonText = (lessonName || "").trim();
-  if (subjectText && lessonText) return `${subjectText} · ${lessonText}`;
-  return subjectText || lessonText || "—";
+const computeCalculations = (shash: number, meetings: number, rate: number, paymentMethod: string) => {
+  const totalHours =
+    paymentMethod === "תקן"
+      ? Math.round(shash * 30)
+      : Math.round(shash * meetings);
+
+  let overheadFactor = 1.0;
+  if (paymentMethod === "תקן") {
+    overheadFactor = 1.45;
+  } else if (paymentMethod === "שכר מרצים") {
+    overheadFactor = 1.30;
+  } else if (paymentMethod === "קבלה") {
+    overheadFactor = 1.18;
+  } else if (paymentMethod === "קבלת פטור") {
+    overheadFactor = 1.00;
+  }
+
+  const employerOverhead = Math.round(rate * overheadFactor);
+  const totalAnnual =
+    paymentMethod === "תקן"
+      ? Math.round(shash * meetings * employerOverhead)
+      : Math.round(totalHours * employerOverhead);
+
+  return { totalHours, employerOverhead, totalAnnual };
+};
+
+const applyCalculationsToRecord = (row: SalaryRecord): SalaryRecord => {
+  const calcs = computeCalculations(row.shash, row.meetings, row.rate, row.paymentMethod);
+  return { ...row, ...calcs };
 };
 
 const formatSemesterDisplay = (semester: string) =>
@@ -169,7 +192,7 @@ const buildContractContent = (
 
     if (row.paymentMethod === "תקן") {
       rowDetails.push(
-        `(${row.track}) ${row.shash} ש"ש ${formatSubjectDisplay(row.subject, row.lessonName)}, כיתה ${row.year} – ${formattedSemester} בתעריף תקן`
+        `(${row.track}) ${row.shash} ש"ש ${formatSubjectDisplay(row.subject)}, כיתה ${row.year} – ${formattedSemester} בתעריף תקן`
       );
       hasTenure = true;
       return;
@@ -185,7 +208,7 @@ const buildContractContent = (
     }
 
     rowDetails.push(
-      `(${row.track}) ${row.totalHours} ש' ${formatSubjectDisplay(row.subject, row.lessonName)}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${row.rate} ₪ ברוטו לשעה`
+      `(${row.track}) ${row.totalHours} ש' ${formatSubjectDisplay(row.subject)}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${row.rate} ₪ ברוטו לשעה`
     );
   });
 
@@ -463,7 +486,6 @@ export default function App() {
   const [editYear, setEditYear] = useState("יג");
   const [editTeacherName, setEditTeacherName] = useState("");
   const [editSubject, setEditSubject] = useState("");
-  const [editLessonName, setEditLessonName] = useState("");
   const [editSemester, setEditSemester] = useState("שנתי");
   const [editPaymentMethod, setEditPaymentMethod] = useState("שכר מרצים");
   const [editShash, setEditShash] = useState(0);
@@ -501,7 +523,6 @@ export default function App() {
   const [simulatingRow, setSimulatingRow] = useState<SalaryRecord | null>(null);
   const [simName, setSimName] = useState("");
   const [simSubject, setSimSubject] = useState("");
-  const [simLessonName, setSimLessonName] = useState("");
   const [simSemester, setSimSemester] = useState("שנתי");
   const [simPaymentMethod, setSimPaymentMethod] = useState("שכר מרצים");
   const [simShash, setSimShash] = useState(0);
@@ -820,7 +841,6 @@ export default function App() {
     setSimulatingRow(row);
     setSimName(row.teacherName);
     setSimSubject(row.subject);
-    setSimLessonName(row.lessonName || "");
     setSimSemester(formatSemesterDisplay(row.semester));
     setSimPaymentMethod(row.paymentMethod);
     setSimShash(row.shash);
@@ -943,7 +963,7 @@ export default function App() {
 
     const rowIdx = records.findIndex((r) => r.id === req.rowId);
     if (rowIdx !== -1) {
-      const updatedRow: SalaryRecord = {
+      const updatedRow: SalaryRecord = applyCalculationsToRecord({
         ...records[rowIdx],
         teacherName: req.proposed.teacherName,
         subject: req.proposed.subject,
@@ -952,12 +972,9 @@ export default function App() {
         shash: req.proposed.shash,
         meetings: req.proposed.meetings,
         rate: req.proposed.rate,
-        totalHours: req.proposed.totalHours || records[rowIdx].totalHours,
-        employerOverhead: req.proposed.employerOverhead || records[rowIdx].employerOverhead,
-        totalAnnual: req.proposed.totalAnnual,
         travel: req.proposed.travel || records[rowIdx].travel,
         isContractReady: false,
-      };
+      });
 
       // Optimistic UI update so the approved change is visible immediately.
       setRecords((prev) => prev.map((r) => (r.id === updatedRow.id ? updatedRow : r)));
@@ -1562,29 +1579,7 @@ export default function App() {
     }
   };
 
-  // Row mathematical calculations engine
-  const computeCalculations = (shash: number, meetings: number, rate: number, paymentMethod: string) => {
-    const totalHours =
-      paymentMethod === "תקן"
-        ? Math.round(shash * 30)
-        : Math.round(shash * meetings);
-
-    let overheadFactor = 1.0;
-    if (paymentMethod === "תקן") {
-      overheadFactor = 1.45;
-    } else if (paymentMethod === "שכר מרצים") {
-      overheadFactor = 1.30;
-    } else if (paymentMethod === "קבלה") {
-      overheadFactor = 1.18;
-    } else if (paymentMethod === "קבלת פטור") {
-      overheadFactor = 1.00;
-    }
-
-    const employerOverhead = Math.round(rate * overheadFactor);
-    const totalAnnual = Math.round(totalHours * employerOverhead);
-
-    return { totalHours, employerOverhead, totalAnnual };
-  };
+  // Row mathematical calculations engine — see module-level computeCalculations()
 
   const simCalculations = useMemo(() => {
     return computeCalculations(simShash, simMeetings, simRate, simPaymentMethod);
@@ -1608,8 +1603,8 @@ export default function App() {
 
   const submitChangeRequest = async () => {
     if (!simulatingRow) return;
-    if (!simName.trim() || !hasSubjectOrLesson(simSubject, simLessonName)) {
-      triggerAlert("חובה למלא את שם המורה ולפחות אחד מ: שם המקצוע / שם השעור!", "error");
+    if (!simName.trim() || !simSubject.trim()) {
+      triggerAlert("חובה למלא את שם המורה ושם המקצוע!", "error");
       return;
     }
 
@@ -1622,7 +1617,6 @@ export default function App() {
       current: {
         teacherName: simulatingRow.teacherName,
         subject: simulatingRow.subject,
-        lessonName: simulatingRow.lessonName,
         semester: simulatingRow.semester,
         paymentMethod: simulatingRow.paymentMethod,
         shash: simulatingRow.shash,
@@ -1634,7 +1628,6 @@ export default function App() {
       proposed: {
         teacherName: simName.trim(),
         subject: simSubject.trim(),
-        lessonName: simLessonName.trim(),
         semester: simSemester,
         paymentMethod: simPaymentMethod,
         shash: simShash,
@@ -1721,7 +1714,6 @@ export default function App() {
       year: "יג",
       teacherName: "",
       subject: "",
-      lessonName: "",
       semester: "שנתי",
       paymentMethod: "שכר מרצים",
       shash: 0,
@@ -1753,7 +1745,6 @@ export default function App() {
     setEditYear(row.year);
     setEditTeacherName(row.teacherName);
     setEditSubject(row.subject);
-    setEditLessonName(row.lessonName || "");
     setEditSemester(formatSemesterDisplay(row.semester));
     setEditPaymentMethod(row.paymentMethod);
     setEditShash(row.shash);
@@ -1790,8 +1781,8 @@ export default function App() {
   // Save changes to Postgres DB
   const handleSaveRow = async (id: number) => {
     if (!canModify) return;
-    if (!editTeacherName.trim() || !hasSubjectOrLesson(editSubject, editLessonName)) {
-      triggerAlert("חובה להזין את שם המורה ולפחות אחד מ: שם המקצוע / שם השעור!", "error", "פרטים חסרים");
+    if (!editTeacherName.trim() || !editSubject.trim()) {
+      triggerAlert("חובה להזין את שם המורה ושם המקצוע!", "error", "פרטים חסרים");
       return;
     }
 
@@ -1815,7 +1806,6 @@ export default function App() {
       year: editYear,
       teacherName: editTeacherName.trim(),
       subject: editSubject.trim(),
-      lessonName: editLessonName.trim(),
       semester: editSemester,
       paymentMethod: editPaymentMethod,
       shash: editShash,
@@ -1930,6 +1920,52 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRecalculateAllRecords = () => {
+    if (role !== "director" && role !== "secretary") return;
+
+    const toUpdate = records
+      .filter((row) => row.id > 0)
+      .map((row) => applyCalculationsToRecord(row))
+      .filter((row) => {
+        const original = records.find((r) => r.id === row.id);
+        if (!original) return false;
+        return (
+          original.totalHours !== row.totalHours ||
+          original.totalAnnual !== row.totalAnnual ||
+          original.employerOverhead !== row.employerOverhead
+        );
+      });
+
+    if (toUpdate.length === 0) {
+      triggerAlert("כל השורות כבר מחושבות לפי הנוסחה העדכנית.", "success");
+      return;
+    }
+
+    triggerConfirm(
+      `לעדכן ${toUpdate.length} שורות לפי נוסחת החישוב העדכנית (כולל תקן)?`,
+      async () => {
+        setLoading(true);
+        let successCount = 0;
+        for (const row of toUpdate) {
+          try {
+            const response = await fetch("/api/records", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(row),
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success) successCount++;
+            }
+          } catch {}
+        }
+        await fetchRecords();
+        triggerAlert(`עודכנו ${successCount} מתוך ${toUpdate.length} שורות בהצלחה.`, "success");
+        setLoading(false);
+      }
+    );
   };
 
   const handleDeleteRow = (id: number, teacherName: string) => {
@@ -2211,9 +2247,8 @@ export default function App() {
         const query = searchQuery.toLowerCase();
         const matchName = (item.teacherName || "").toLowerCase().includes(query);
         const matchSubject = (item.subject || "").toLowerCase().includes(query);
-        const matchLesson = (item.lessonName || "").toLowerCase().includes(query);
         const matchTz = (item.tz || "").includes(query);
-        if (!matchName && !matchSubject && !matchLesson && !matchTz) return false;
+        if (!matchName && !matchSubject && !matchTz) return false;
       }
 
       return true;
@@ -2430,7 +2465,7 @@ export default function App() {
       return;
     }
 
-    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,שם השעור,מחצית / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,נסיעות\n";
+    let csv = "\uFEFFהתמחות,שנה,שם המורה,שם המקצוע,מחצית / מחזור,צורת תשלום,ש\"ש,מפגשים/חודשים,שעות תלמידות שנתי,תעריף שעה,עלות מעביד,סה\"כ שנתי שכר,סטטוס אישור,נסיעות\n";
     let totalHoursSum = 0;
     let totalBudgetSum = 0;
 
@@ -2439,7 +2474,7 @@ export default function App() {
       const travelStr = item.travel || "בית שמש";
       const methodStr = `${item.paymentMethod} (${item.paymentMethod === "תקן" ? "+45%" : item.paymentMethod === "שכר מרצים" ? "+30%" : item.paymentMethod === "קבלה" ? "+18%" : "0%"})`;
 
-      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${item.lessonName || ""}","${formatSemesterDisplay(item.semester)}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${travelStr}"\n`;
+      csv += `"${item.track || ""}","${item.year || ""}","${item.teacherName || ""}","${item.subject || ""}","${formatSemesterDisplay(item.semester)}","${methodStr}",${item.shash},${item.meetings},${item.totalHours},${item.rate},${item.employerOverhead},${item.totalAnnual},"${statusStr}","${travelStr}"\n`;
 
       totalHoursSum += item.totalHours;
       totalBudgetSum += item.totalAnnual;
@@ -3063,6 +3098,18 @@ export default function App() {
                       <FileText className="w-3.5 h-3.5" />
                       <span>דוח סופי 📋</span>
                     </button>
+
+                    {(role === "director" || role === "secretary") && (
+                      <button
+                        onClick={handleRecalculateAllRecords}
+                        disabled={loading}
+                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center h-9"
+                        title="מחשב מחדש שעות ושכר לכל השורות לפי הנוסחה העדכנית"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>חשב מחדש שכר</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3184,8 +3231,7 @@ export default function App() {
                         <th className="p-2 w-[5%] text-right hidden lg:table-cell leading-tight bg-slate-200">התמחות</th>
                         <th className="p-2 w-[3%] text-center leading-tight bg-slate-200">שנה</th>
                         <th className="p-2 w-[8%] text-right leading-tight bg-slate-200">שם המורה</th>
-                        <th className="p-2 w-[7%] text-right hidden md:table-cell leading-tight bg-slate-200">שם המקצוע</th>
-                        <th className="p-2 w-[7%] text-right hidden md:table-cell leading-tight bg-slate-200">שם השעור</th>
+                        <th className="p-2 w-[8%] text-right hidden md:table-cell leading-tight bg-slate-200">שם המקצוע</th>
                         <th className="p-2 w-[6%] text-right leading-tight hidden lg:table-cell bg-slate-200">מחצית / מחזור</th>
                         <th className="p-2 w-[7%] text-center hidden lg:table-cell leading-tight bg-slate-200">צורת תשלום</th>
                         <th className="p-2 text-center w-[3%] leading-tight bg-slate-200">ש"ש</th>
@@ -3205,7 +3251,7 @@ export default function App() {
                     <tbody className="divide-y divide-slate-100 text-[11px]">
                       {filteredRecords.length === 0 ? (
                         <tr>
-                          <td colSpan={20} className="text-center py-12 text-slate-400 font-bold">
+                          <td colSpan={19} className="text-center py-12 text-slate-400 font-bold">
                             לא נמצאו משרות העונות על פילוח הסינון הנוכחי.
                           </td>
                         </tr>
@@ -3217,7 +3263,7 @@ export default function App() {
                           if (item.id === activeEditingId && item.id < 0) {
                             return (
                               <tr key={item.id} className="bg-emerald-50/60">
-                                <td colSpan={20} className="p-4 border-b-2 border-emerald-200">
+                                <td colSpan={19} className="p-4 border-b-2 border-emerald-200">
                                   <div className="flex items-center gap-2 mb-3">
                                     <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
                                       <Plus className="w-3.5 h-3.5" />
@@ -3237,22 +3283,12 @@ export default function App() {
                                       />
                                     </div>
                                     <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם המקצוע</label>
+                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם המקצוע *</label>
                                       <input
                                         type="text"
                                         value={editSubject}
                                         onChange={(e) => setEditSubject(e.target.value)}
                                         placeholder="קריאה"
-                                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-[10px] font-bold text-slate-500 mb-1">שם השעור</label>
-                                      <input
-                                        type="text"
-                                        value={editLessonName}
-                                        onChange={(e) => setEditLessonName(e.target.value)}
-                                        placeholder="שיטת קריאה 1"
                                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                                       />
                                     </div>
@@ -3557,9 +3593,6 @@ export default function App() {
                               </td>
                               <td className="p-1.5 border-b border-slate-100 font-medium text-slate-800 align-middle hidden md:table-cell">
                                 <AutoFitCellText className="font-medium text-slate-800">{item.subject || "—"}</AutoFitCellText>
-                              </td>
-                              <td className="p-1.5 border-b border-slate-100 font-medium text-slate-700 align-middle hidden md:table-cell">
-                                <AutoFitCellText className="font-medium text-slate-700">{item.lessonName || "—"}</AutoFitCellText>
                               </td>
                               <td className="p-1.5 border-b border-slate-100 text-slate-600 align-middle hidden lg:table-cell">
                                 <AutoFitCellText maxLines={2} className="text-slate-600">
@@ -4556,23 +4589,12 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המקצוע</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם המקצוע *</label>
                     <input
                       type="text"
                       placeholder="לדוגמה: קריאה"
                       value={editSubject}
                       onChange={(e) => setEditSubject(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1 text-right">שם השעור</label>
-                    <input
-                      type="text"
-                      placeholder="לדוגמה: שיטת קריאה 1"
-                      value={editLessonName}
-                      onChange={(e) => setEditLessonName(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-emerald-600 bg-white"
                     />
                   </div>
@@ -4773,12 +4795,8 @@ export default function App() {
                   <input type="text" value={simName} onChange={(e) => setSimName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המקצוע</label>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם המקצוע *</label>
                   <input type="text" value={simSubject} onChange={(e) => setSimSubject(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">שם השעור</label>
-                  <input type="text" value={simLessonName} onChange={(e) => setSimLessonName(e.target.value)} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-emerald-500" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">מחצית / מחזור</label>
