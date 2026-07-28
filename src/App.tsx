@@ -185,17 +185,22 @@ const applyCalculationsToRecord = (row: SalaryRecord): SalaryRecord => {
   return { ...row, ...calcs };
 };
 
-const mergeServerRecords = (prev: SalaryRecord[], serverRecords: SalaryRecord[]) => {
-  const drafts = prev.filter((row) => row.id < 0);
-  return [...drafts, ...serverRecords];
+const resolveCanonicalTrack = (track: string) => {
+  const normalized = normalizeTrack(track);
+  return ALL_TRACKS.find((t) => normalizeTrack(t) === normalized) || track.trim();
 };
 
-const upsertSavedRecord = (prev: SalaryRecord[], saved: SalaryRecord, draftOrEditId: number) => {
-  const withoutDraftOrEdit = prev.filter((row) => row.id !== draftOrEditId);
-  if (saved.id > 0) {
-    return [saved, ...withoutDraftOrEdit.filter((row) => row.id !== saved.id)];
+const mergeServerRecords = (prev: SalaryRecord[], serverRecords: SalaryRecord[]) => {
+  const drafts = prev.filter((row) => row.id < 0);
+  const mergedById = new Map<number, SalaryRecord>();
+  for (const row of prev) {
+    if (row.id > 0) mergedById.set(row.id, row);
   }
-  return [saved, ...withoutDraftOrEdit];
+  for (const row of serverRecords) {
+    if (row.id > 0) mergedById.set(row.id, row);
+  }
+  const persisted = Array.from(mergedById.values()).sort((a, b) => b.id - a.id);
+  return [...drafts, ...persisted];
 };
 
 const syncPersistedRecordsToLocalStorage = (rows: SalaryRecord[]) => {
@@ -229,19 +234,6 @@ const mapDbToRecord = (dbItem: any): SalaryRecord => ({
   gradeTiming: dbItem.grade_timing || "ציון אחד בסוף שנה",
   monthlyHours: dbItem.monthly_hours ? JSON.parse(dbItem.monthly_hours) : {},
 });
-
-const resolveSavedRecordFromApi = (
-  raw: unknown,
-  fallback: SalaryRecord
-): SalaryRecord | null => {
-  if (!raw || typeof raw !== "object") return null;
-  const record = raw as Record<string, unknown>;
-  const mapped: SalaryRecord =
-    "teacher_name" in record
-      ? mapDbToRecord(record)
-      : { ...fallback, ...(raw as SalaryRecord), id: Number((raw as SalaryRecord).id) };
-  return Number.isFinite(mapped.id) && mapped.id > 0 ? mapped : null;
-};
 
 const formatSemesterDisplay = (semester: string) =>
   (semester || "שנתי").replace(/סמסטר/g, "מחצית");
@@ -757,10 +749,13 @@ export default function App() {
       if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success) {
-        setRecords((prev) => mergeServerRecords(prev, data.records));
+        setRecords((prev) => {
+          const next = mergeServerRecords(prev, data.records);
+          syncPersistedRecordsToLocalStorage(next);
+          return next;
+        });
         setDbMode(data.dbMode);
         setCloudConnectionStyle("express");
-        syncPersistedRecordsToLocalStorage(data.records);
         return;
       }
       throw new Error("Backend response error status");
@@ -783,10 +778,13 @@ export default function App() {
             const rows = await res.json();
             if (Array.isArray(rows)) {
               const mapped = rows.map(mapDbToRecord);
-              setRecords((prev) => mergeServerRecords(prev, mapped));
+              setRecords((prev) => {
+                const next = mergeServerRecords(prev, mapped);
+                syncPersistedRecordsToLocalStorage(next);
+                return next;
+              });
               setDbMode("cloud");
               setCloudConnectionStyle("direct");
-              syncPersistedRecordsToLocalStorage(mapped);
               return;
             }
           }
@@ -1808,7 +1806,7 @@ export default function App() {
       monthlyHours: {}
     };
 
-    setRecords([newRow, ...records]);
+    setRecords((prev) => [newRow, ...prev]);
     loadEditBuffers(newRow);
     if (filterStatus === "saved") {
       setFilterStatus("all");
@@ -1879,9 +1877,13 @@ export default function App() {
     const calcs = computeCalculations(editShash, editMeetings, editRate, editPaymentMethod);
 
     const matchRow = records.find((r) => r.id === id);
+    const resolvedTrack =
+      role === "coordinator" && activeTrack
+        ? activeTrack
+        : resolveCanonicalTrack(editTrack);
     const updatedRow: SalaryRecord = {
       id: id > 0 ? id : 0, // id is mapped server-side for new entries
-      track: editTrack,
+      track: resolvedTrack,
       year: editYear,
       teacherName: editTeacherName.trim(),
       subject: editSubject.trim(),
@@ -1913,18 +1915,12 @@ export default function App() {
       if (!response.ok) throw new Error("Express backend not available or returned error");
       const data = await response.json();
       if (data.success) {
-        const savedRecord = resolveSavedRecordFromApi(data.record, updatedRow);
-        if (savedRecord) {
-          setRecords((prev) => {
-            const next = upsertSavedRecord(prev, savedRecord, id);
-            syncPersistedRecordsToLocalStorage(next);
-            return next;
-          });
-          triggerAlert(`משרת המורה "${savedRecord.teacherName}" נשמרה בהצלחה במערכת!`, "success", "נשמר בהצלחה");
-        } else {
-          await fetchRecords();
-          triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה — הרשימה רועננה מהשרת.`, "success", "נשמר בהצלחה");
-        }
+        await fetchRecords();
+        triggerAlert(
+          `משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה במערכת!`,
+          "success",
+          "נשמר בהצלחה"
+        );
         setActiveEditingId(null);
         setEditModalId(null);
         return;
@@ -1967,24 +1963,12 @@ export default function App() {
           }
 
           if (res.ok) {
-            const rows = await res.json();
-            const savedItem =
-              rows && rows.length > 0
-                ? resolveSavedRecordFromApi(rows[0], updatedRow) || mapDbToRecord(rows[0])
-                : null;
-            if (!savedItem || savedItem.id <= 0) {
-              await fetchRecords();
-              triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה — הרשימה רועננה מהשרת.`, "success", "נשמר בהצלחה");
-              setActiveEditingId(null);
-              setEditModalId(null);
-              return;
-            }
-            setRecords((prev) => {
-              const next = upsertSavedRecord(prev, savedItem, id);
-              syncPersistedRecordsToLocalStorage(next);
-              return next;
-            });
-            triggerAlert(`משרת המורה "${savedItem.teacherName}" נשמרה בהצלחה ישירות בענן!`, "success", "נשמר בהצלחה");
+            await fetchRecords();
+            triggerAlert(
+              `משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה ישירות בענן!`,
+              "success",
+              "נשמר בהצלחה"
+            );
             setActiveEditingId(null);
             setEditModalId(null);
             return;
@@ -2017,7 +2001,7 @@ export default function App() {
         }
 
         localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
-        setRecords((prev) => upsertSavedRecord(prev, savedLocal, id));
+        setRecords((prev) => mergeServerRecords(prev, localRows));
         triggerAlert(`משרת המורה "${savedLocal.teacherName}" נשמרה בהצלחה במחשב זה (מצב מקומי)!`, "success", "נשמר מקומית");
         setActiveEditingId(null);
         setEditModalId(null);

@@ -725,6 +725,33 @@ app.put(
 );
 
 // API Helper to get all records
+function mapPgRowToRecord(row: any) {
+  return {
+    id: Number(row.id),
+    track: row.track,
+    year: row.year,
+    teacherName: row.teacher_name,
+    subject: row.subject,
+    lessonName: row.lesson_name || "",
+    semester: row.semester,
+    paymentMethod: row.payment_method,
+    shash: Number(row.shash),
+    meetings: row.meetings,
+    totalHours: row.total_hours,
+    rate: Number(row.rate),
+    employerOverhead: Number(row.employer_overhead),
+    totalAnnual: Number(row.total_annual),
+    tz: row.tz,
+    phone: row.phone,
+    email: row.email,
+    isApproved: row.is_approved,
+    isContractReady: row.is_contract_ready,
+    travel: row.travel || "בית שמש",
+    gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
+    monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
+  };
+}
+
 async function getRecords() {
   await checkDbModeOnRequest();
   // Mode 1: Direct Postgres Pool
@@ -732,30 +759,7 @@ async function getRecords() {
   if (pool && isDbHealthy && dbMode === "cloud") {
     try {
       const res = await pool.query("SELECT * FROM salary_records ORDER BY id ASC");
-      return res.rows.map(row => ({
-        id: row.id,
-        track: row.track,
-        year: row.year,
-        teacherName: row.teacher_name,
-        subject: row.subject,
-        lessonName: row.lesson_name || "",
-        semester: row.semester,
-        paymentMethod: row.payment_method,
-        shash: Number(row.shash),
-        meetings: row.meetings,
-        totalHours: row.total_hours,
-        rate: Number(row.rate),
-        employerOverhead: Number(row.employer_overhead),
-        totalAnnual: Number(row.total_annual),
-        tz: row.tz,
-        phone: row.phone,
-        email: row.email,
-        isApproved: row.is_approved,
-        isContractReady: row.is_contract_ready,
-        travel: row.travel || "בית שמש",
-        gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
-        monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
-      }));
+      return res.rows.map(mapPgRowToRecord);
     } catch (err) {
       console.error("Error fetching from direct Postgres:", err);
       isDbHealthy = false;
@@ -770,30 +774,7 @@ async function getRecords() {
     try {
       const res = await supabaseFetch("/salary_records?select=*&order=id.asc");
       const rows = await res.json();
-      return rows.map((row: any) => ({
-        id: row.id,
-        track: row.track,
-        year: row.year,
-        teacherName: row.teacher_name,
-        subject: row.subject,
-        lessonName: row.lesson_name || "",
-        semester: row.semester,
-        paymentMethod: row.payment_method,
-        shash: Number(row.shash),
-        meetings: row.meetings,
-        totalHours: row.total_hours,
-        rate: Number(row.rate),
-        employerOverhead: Number(row.employer_overhead),
-        totalAnnual: Number(row.total_annual),
-        tz: row.tz,
-        phone: row.phone,
-        email: row.email,
-        isApproved: row.is_approved,
-        isContractReady: row.is_contract_ready,
-        travel: row.travel || "בית שמש",
-        gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
-        monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
-      }));
+      return rows.map(mapPgRowToRecord);
     } catch (err) {
       console.error("Error fetching from Supabase REST:", err);
       isDbHealthy = false;
@@ -862,8 +843,9 @@ async function saveRecord(item: any) {
           ]
         );
         if (res.rows.length > 0) {
-          return { ...item, id: res.rows[0].id };
+          return mapPgRowToRecord(res.rows[0]);
         }
+        throw new Error(`Record id ${item.id} was not found for update`);
       } else {
         // Create new record
         const res = await pool.query(
@@ -879,32 +861,9 @@ async function saveRecord(item: any) {
           ]
         );
         if (res.rows.length > 0) {
-          const row = res.rows[0];
-          return {
-            id: row.id,
-            track: row.track,
-            year: row.year,
-            teacherName: row.teacher_name,
-            subject: row.subject,
-            lessonName: row.lesson_name || "",
-            semester: row.semester,
-            paymentMethod: row.payment_method,
-            shash: Number(row.shash),
-            meetings: row.meetings,
-            totalHours: row.total_hours,
-            rate: Number(row.rate),
-            employerOverhead: Number(row.employer_overhead),
-            totalAnnual: Number(row.total_annual),
-            tz: row.tz,
-            phone: row.phone,
-            email: row.email,
-            isApproved: row.is_approved,
-            isContractReady: row.is_contract_ready,
-            travel: row.travel || "בית שמש",
-            gradeTiming: row.grade_timing || "ציון אחד בסוף שנה",
-            monthlyHours: row.monthly_hours ? JSON.parse(row.monthly_hours) : {}
-          };
+          return mapPgRowToRecord(res.rows[0]);
         }
+        throw new Error("Insert did not return a saved record");
       }
     } catch (err) {
       console.error("Error saving to Postgres direct, trying Supabase fallback or local:", err);
@@ -922,9 +881,9 @@ async function saveRecord(item: any) {
         });
         const updatedRows = await res.json();
         if (updatedRows && updatedRows.length > 0) {
-          return { ...item, id: updatedRows[0].id };
+          return mapPgRowToRecord(updatedRows[0]);
         }
-        return item;
+        throw new Error(`Record id ${item.id} was not found for update`);
       } else {
         const res = await supabaseFetch("/salary_records", {
           method: "POST",
@@ -933,16 +892,20 @@ async function saveRecord(item: any) {
         });
         const insertedRows = await res.json();
         if (insertedRows && insertedRows.length > 0) {
-          return { ...item, id: insertedRows[0].id };
+          return mapPgRowToRecord(insertedRows[0]);
         }
-        return item;
+        throw new Error("Insert did not return a saved record");
       }
     } catch (err) {
       console.error("Error saving to Supabase REST:", err);
     }
   }
 
-  // Fallback save to local file
+  // Fallback save to local file only when cloud is not configured.
+  if (process.env.DATABASE_URL || hasSupabaseRest) {
+    throw new Error("Failed to persist record to cloud database");
+  }
+
   const localRecords = await getRecords();
   if (item.id && item.id > 0) {
     const idx = localRecords.findIndex((r: any) => r.id === item.id);
@@ -1143,6 +1106,10 @@ app.get("/api/records", async (req, res) => {
 app.post("/api/records", blockViewerWrites, async (req, res) => {
   try {
     const saved = await saveRecord(req.body);
+    const savedId = Number(saved?.id);
+    if (!Number.isFinite(savedId) || savedId <= 0) {
+      return res.status(500).json({ success: false, error: "Record was not saved with a valid id" });
+    }
     res.json({ success: true, dbMode, record: saved });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
