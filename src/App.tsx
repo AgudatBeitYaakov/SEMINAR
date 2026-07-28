@@ -190,14 +190,57 @@ const mergeServerRecords = (prev: SalaryRecord[], serverRecords: SalaryRecord[])
   return [...drafts, ...serverRecords];
 };
 
-const upsertSavedRecord = (prev: SalaryRecord[], saved: SalaryRecord, draftOrEditId: number) =>
-  [saved, ...prev.filter((row) => row.id !== draftOrEditId && row.id !== saved.id)];
+const upsertSavedRecord = (prev: SalaryRecord[], saved: SalaryRecord, draftOrEditId: number) => {
+  const withoutDraftOrEdit = prev.filter((row) => row.id !== draftOrEditId);
+  if (saved.id > 0) {
+    return [saved, ...withoutDraftOrEdit.filter((row) => row.id !== saved.id)];
+  }
+  return [saved, ...withoutDraftOrEdit];
+};
 
 const syncPersistedRecordsToLocalStorage = (rows: SalaryRecord[]) => {
   localStorage.setItem(
     "sz_local_records_v2",
     JSON.stringify(rows.filter((row) => row.id > 0))
   );
+};
+
+const mapDbToRecord = (dbItem: any): SalaryRecord => ({
+  id: Number(dbItem.id),
+  track: dbItem.track,
+  year: dbItem.year,
+  teacherName: dbItem.teacher_name,
+  subject: dbItem.subject,
+  lessonName: dbItem.lesson_name || "",
+  semester: dbItem.semester,
+  paymentMethod: dbItem.payment_method,
+  shash: Number(dbItem.shash || 0),
+  meetings: Number(dbItem.meetings || 0),
+  totalHours: Number(dbItem.total_hours || 0),
+  rate: Number(dbItem.rate || 0),
+  employerOverhead: Number(dbItem.employer_overhead || 0),
+  totalAnnual: Number(dbItem.total_annual || 0),
+  tz: dbItem.tz || "",
+  phone: dbItem.phone || "",
+  email: dbItem.email || "",
+  isApproved: Boolean(dbItem.is_approved),
+  isContractReady: Boolean(dbItem.is_contract_ready),
+  travel: dbItem.travel || "בית שמש",
+  gradeTiming: dbItem.grade_timing || "ציון אחד בסוף שנה",
+  monthlyHours: dbItem.monthly_hours ? JSON.parse(dbItem.monthly_hours) : {},
+});
+
+const resolveSavedRecordFromApi = (
+  raw: unknown,
+  fallback: SalaryRecord
+): SalaryRecord | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const mapped: SalaryRecord =
+    "teacher_name" in record
+      ? mapDbToRecord(record)
+      : { ...fallback, ...(raw as SalaryRecord), id: Number((raw as SalaryRecord).id) };
+  return Number.isFinite(mapped.id) && mapped.id > 0 ? mapped : null;
 };
 
 const formatSemesterDisplay = (semester: string) =>
@@ -633,33 +676,6 @@ export default function App() {
       travel: item.travel || "בית שמש",
       grade_timing: item.gradeTiming || "ציון אחד בסוף שנה",
       monthly_hours: item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
-    };
-  };
-
-  const mapDbToRecord = (dbItem: any): SalaryRecord => {
-    return {
-      id: dbItem.id,
-      track: dbItem.track,
-      year: dbItem.year,
-      teacherName: dbItem.teacher_name,
-      subject: dbItem.subject,
-      lessonName: dbItem.lesson_name || "",
-      semester: dbItem.semester,
-      paymentMethod: dbItem.payment_method,
-      shash: Number(dbItem.shash || 0),
-      meetings: Number(dbItem.meetings || 0),
-      totalHours: Number(dbItem.total_hours || 0),
-      rate: Number(dbItem.rate || 0),
-      employerOverhead: Number(dbItem.employer_overhead || 0),
-      totalAnnual: Number(dbItem.total_annual || 0),
-      tz: dbItem.tz || "",
-      phone: dbItem.phone || "",
-      email: dbItem.email || "",
-      isApproved: Boolean(dbItem.is_approved),
-      isContractReady: Boolean(dbItem.is_contract_ready),
-      travel: dbItem.travel || "בית שמש",
-      gradeTiming: dbItem.grade_timing || "ציון אחד בסוף שנה",
-      monthlyHours: dbItem.monthly_hours ? JSON.parse(dbItem.monthly_hours) : {}
     };
   };
 
@@ -1897,15 +1913,18 @@ export default function App() {
       if (!response.ok) throw new Error("Express backend not available or returned error");
       const data = await response.json();
       if (data.success) {
-        const savedRecord: SalaryRecord = data.record?.id
-          ? { ...updatedRow, ...data.record, id: Number(data.record.id) }
-          : updatedRow;
-        setRecords((prev) => {
-          const next = upsertSavedRecord(prev, savedRecord, id);
-          syncPersistedRecordsToLocalStorage(next);
-          return next;
-        });
-        triggerAlert(`משרת המורה "${savedRecord.teacherName}" נשמרה בהצלחה במערכת!`, "success", "נשמר בהצלחה");
+        const savedRecord = resolveSavedRecordFromApi(data.record, updatedRow);
+        if (savedRecord) {
+          setRecords((prev) => {
+            const next = upsertSavedRecord(prev, savedRecord, id);
+            syncPersistedRecordsToLocalStorage(next);
+            return next;
+          });
+          triggerAlert(`משרת המורה "${savedRecord.teacherName}" נשמרה בהצלחה במערכת!`, "success", "נשמר בהצלחה");
+        } else {
+          await fetchRecords();
+          triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה — הרשימה רועננה מהשרת.`, "success", "נשמר בהצלחה");
+        }
         setActiveEditingId(null);
         setEditModalId(null);
         return;
@@ -1949,7 +1968,17 @@ export default function App() {
 
           if (res.ok) {
             const rows = await res.json();
-            const savedItem = rows && rows.length > 0 ? mapDbToRecord(rows[0]) : updatedRow;
+            const savedItem =
+              rows && rows.length > 0
+                ? resolveSavedRecordFromApi(rows[0], updatedRow) || mapDbToRecord(rows[0])
+                : null;
+            if (!savedItem || savedItem.id <= 0) {
+              await fetchRecords();
+              triggerAlert(`משרת המורה "${updatedRow.teacherName}" נשמרה — הרשימה רועננה מהשרת.`, "success", "נשמר בהצלחה");
+              setActiveEditingId(null);
+              setEditModalId(null);
+              return;
+            }
             setRecords((prev) => {
               const next = upsertSavedRecord(prev, savedItem, id);
               syncPersistedRecordsToLocalStorage(next);
