@@ -742,20 +742,26 @@ export default function App() {
   };
 
   // Fetch from Express Server or Supabase Direct REST
-  const fetchRecords = async () => {
+  const fetchRecords = async (excludeDraftId?: number) => {
+    const applyRecords = (serverRecords: SalaryRecord[], mode: typeof dbMode, style: typeof cloudConnectionStyle) => {
+      setRecords((prev) => {
+        const base =
+          excludeDraftId !== undefined ? prev.filter((row) => row.id !== excludeDraftId) : prev;
+        const next = mergeServerRecords(base, serverRecords);
+        syncPersistedRecordsToLocalStorage(next);
+        return next;
+      });
+      setDbMode(mode);
+      setCloudConnectionStyle(style);
+    };
+
     setLoading(true);
     try {
       const response = await fetch("/api/records");
       if (!response.ok) throw new Error("Express backend not available");
       const data = await response.json();
       if (data.success) {
-        setRecords((prev) => {
-          const next = mergeServerRecords(prev, data.records);
-          syncPersistedRecordsToLocalStorage(next);
-          return next;
-        });
-        setDbMode(data.dbMode);
-        setCloudConnectionStyle("express");
+        applyRecords(data.records, data.dbMode, "express");
         return;
       }
       throw new Error("Backend response error status");
@@ -778,13 +784,7 @@ export default function App() {
             const rows = await res.json();
             if (Array.isArray(rows)) {
               const mapped = rows.map(mapDbToRecord);
-              setRecords((prev) => {
-                const next = mergeServerRecords(prev, mapped);
-                syncPersistedRecordsToLocalStorage(next);
-                return next;
-              });
-              setDbMode("cloud");
-              setCloudConnectionStyle("direct");
+              applyRecords(mapped, "cloud", "direct");
               return;
             }
           }
@@ -798,16 +798,31 @@ export default function App() {
       if (localData) {
         try {
           const localRows: SalaryRecord[] = JSON.parse(localData);
-          setRecords((prev) => mergeServerRecords(prev, localRows));
+          setRecords((prev) => {
+            const base =
+              excludeDraftId !== undefined ? prev.filter((row) => row.id !== excludeDraftId) : prev;
+            return mergeServerRecords(base, localRows);
+          });
         } catch (e) {}
       } else {
-        setRecords((prev) => prev.filter((row) => row.id < 0));
+        setRecords((prev) => {
+          const base =
+            excludeDraftId !== undefined ? prev.filter((row) => row.id !== excludeDraftId) : prev;
+          return base.filter((row) => row.id < 0);
+        });
       }
       setDbMode("local");
       setCloudConnectionStyle("none");
     } finally {
       setLoading(false);
     }
+  };
+
+  /** After save: close editors, drop saved draft row, reload from server/local source */
+  const finalizeRowSave = async (savedRowId: number) => {
+    setActiveEditingId(null);
+    setEditModalId(null);
+    await fetchRecords(savedRowId < 0 ? savedRowId : undefined);
   };
 
   const fetchChangeRequests = async () => {
@@ -1915,14 +1930,12 @@ export default function App() {
       if (!response.ok) throw new Error("Express backend not available or returned error");
       const data = await response.json();
       if (data.success) {
-        await fetchRecords();
+        await finalizeRowSave(id);
         triggerAlert(
           `משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה במערכת!`,
           "success",
           "נשמר בהצלחה"
         );
-        setActiveEditingId(null);
-        setEditModalId(null);
         return;
       }
       throw new Error("Express backend returned unsuccessful response");
@@ -1963,14 +1976,12 @@ export default function App() {
           }
 
           if (res.ok) {
-            await fetchRecords();
+            await finalizeRowSave(id);
             triggerAlert(
               `משרת המורה "${updatedRow.teacherName}" נשמרה בהצלחה ישירות בענן!`,
               "success",
               "נשמר בהצלחה"
             );
-            setActiveEditingId(null);
-            setEditModalId(null);
             return;
           } else {
             const errText = await res.text();
@@ -2001,10 +2012,15 @@ export default function App() {
         }
 
         localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
-        setRecords((prev) => mergeServerRecords(prev, localRows));
-        triggerAlert(`משרת המורה "${savedLocal.teacherName}" נשמרה בהצלחה במחשב זה (מצב מקומי)!`, "success", "נשמר מקומית");
         setActiveEditingId(null);
         setEditModalId(null);
+        setRecords((prev) => {
+          const withoutSavedDraft = id < 0 ? prev.filter((row) => row.id !== id) : prev;
+          const next = mergeServerRecords(withoutSavedDraft, localRows);
+          syncPersistedRecordsToLocalStorage(next);
+          return next;
+        });
+        triggerAlert(`משרת המורה "${savedLocal.teacherName}" נשמרה בהצלחה במחשב זה (מצב מקומי)!`, "success", "נשמר מקומית");
       } catch (localErr) {
         triggerAlert("שגיאה בשמירת הנתונים מקומית", "error");
       }
