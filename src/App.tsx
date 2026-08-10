@@ -212,7 +212,7 @@ const syncPersistedRecordsToLocalStorage = (rows: SalaryRecord[]) => {
 
 const mapDbToRecord = (dbItem: any): SalaryRecord => ({
   id: Number(dbItem.id),
-  track: dbItem.track,
+  track: resolveCanonicalTrack(dbItem.track),
   year: dbItem.year,
   teacherName: dbItem.teacher_name,
   subject: dbItem.subject,
@@ -645,13 +645,12 @@ export default function App() {
   const canModify = role !== "guest" && role !== "viewer";
 
   // DB payload mapping helpers
-  const mapRecordToDb = (item: any) => {
-    return {
+  const mapRecordToDb = (item: any, forRest = false) => {
+    const payload: Record<string, unknown> = {
       track: item.track,
       year: item.year,
       teacher_name: item.teacherName,
       subject: item.subject,
-      lesson_name: item.lessonName || "",
       semester: item.semester,
       payment_method: item.paymentMethod,
       shash: item.shash,
@@ -669,6 +668,8 @@ export default function App() {
       grade_timing: item.gradeTiming || "ציון אחד בסוף שנה",
       monthly_hours: item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
     };
+    if (!forRest) payload.lesson_name = item.lessonName || "";
+    return payload;
   };
 
   // Load configuration from LocalStorage and backend API on mount
@@ -1947,7 +1948,7 @@ export default function App() {
       
       if (sUrl && sKey) {
         try {
-          const dbPayload = mapRecordToDb(updatedRow);
+          const dbPayload = mapRecordToDb(updatedRow, true);
           let res;
           if (id > 0) {
             // PATCH existing record
@@ -1992,7 +1993,22 @@ export default function App() {
         }
       }
 
-      // Local storage fallback as last resort
+      // Local storage fallback only when cloud is not configured/expected
+      const expectsCloud =
+        dbMode === "cloud" ||
+        cloudConnectionStyle !== "none" ||
+        Boolean(localStorage.getItem("sz_supabase_url")) ||
+        Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+      if (expectsCloud) {
+        triggerAlert(
+          "השמירה לענן נכשלה — הנתונים לא נשמרו במערכת המשותפת! בדקי חיבור לאינטרנט ונסי שוב.",
+          "error",
+          "שמירה נכשלה"
+        );
+        return;
+      }
+
       try {
         const localData = localStorage.getItem("sz_local_records_v2");
         let localRows: any[] = [];
@@ -2177,7 +2193,7 @@ export default function App() {
 
       if (sUrl && sKey) {
         try {
-          const dbPayload = mapRecordToDb(updatedRow);
+          const dbPayload = mapRecordToDb(updatedRow, true);
           const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${id}`, {
             method: "PATCH",
             headers: {
@@ -2444,13 +2460,29 @@ export default function App() {
 
     let grandTotal = 0;
     records.forEach((item) => {
-      if (budgets[item.track] !== undefined) {
-        budgets[item.track] += item.totalAnnual;
+      const canonical = resolveCanonicalTrack(item.track);
+      if (budgets[canonical] !== undefined) {
+        budgets[canonical] += item.totalAnnual;
         grandTotal += item.totalAnnual;
       }
     });
 
     return { budgets, grandTotal };
+  }, [records]);
+
+  /** ספירת שורות שמורות לפי מסלול — לבקרה של מנהלת/מזכירה */
+  const recordsCountByTrack = useMemo(() => {
+    const counts: Record<string, number> = {};
+    ALL_TRACKS.forEach((t) => {
+      counts[t] = 0;
+    });
+    records
+      .filter((r) => r.id > 0)
+      .forEach((r) => {
+        const canonical = resolveCanonicalTrack(r.track);
+        if (counts[canonical] !== undefined) counts[canonical] += 1;
+      });
+    return counts;
   }, [records]);
 
   // Consolidated Contract text generator
@@ -3075,9 +3107,15 @@ export default function App() {
                     <h3 className="text-xl font-bold text-sky-600 mt-1">
                       {metrics.totalSaved} שורות
                     </h3>
-                    <div className="mt-2">
-                      <span className="text-sky-700 font-semibold bg-sky-50 px-2 py-0.5 rounded text-[10px] border border-sky-100">
-                        פעיל במאגר הנתונים
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span
+                        className={`font-semibold px-2 py-0.5 rounded text-[10px] border ${
+                          dbMode === "cloud"
+                            ? "text-emerald-700 bg-emerald-50 border-emerald-100"
+                            : "text-amber-800 bg-amber-50 border-amber-200"
+                        }`}
+                      >
+                        {dbMode === "cloud" ? "מחובר לענן ✓" : "מצב מקומי — לא משותף!"}
                       </span>
                     </div>
                   </div>
@@ -3113,6 +3151,40 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {(role === "director" || role === "secretary") && (
+                <div className="mb-6 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                    <h3 className="text-xs font-bold text-slate-700">משרות שמורות לפי מסלול (כל המאגר)</h3>
+                    <span className="text-[10px] text-slate-500">
+                      סה״כ {records.filter((r) => r.id > 0).length} שורות ·{" "}
+                      {dbMode === "cloud" ? "מקור: ענן משותף" : "מקור: מחשב זה בלבד"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ALL_TRACKS.map((track) => {
+                      const count = recordsCountByTrack[track] || 0;
+                      return (
+                        <span
+                          key={track}
+                          className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                            count > 0
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              : "bg-white text-slate-400 border-slate-200"
+                          }`}
+                        >
+                          {track}: {count}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {dbMode !== "cloud" && (
+                    <p className="text-[10px] text-amber-800 mt-2 font-medium">
+                      שימי לב: במצב מקומי הנתונים נשמרים רק בדפדפן הזה. רכזות אחרות לא רואות אותם — יש לחבר את Supabase בהגדרות מסד הנתונים.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Filters Block */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6 no-print">

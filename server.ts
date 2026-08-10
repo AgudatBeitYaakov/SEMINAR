@@ -724,11 +724,33 @@ app.put(
   }
 );
 
+// Track names — keep in sync with src/App.tsx ALL_TRACKS
+const ALL_TRACKS = [
+  "קודש",
+  "חובה",
+  'חנ"מ והו"מ',
+  "גננות",
+  "אדריכלות",
+  "גרפיקה",
+  "מיסים וחשבונאות",
+];
+
+const normalizeTrackName = (track: string) =>
+  (track || "")
+    .trim()
+    .replace(/[״"''׳]/g, '"')
+    .replace(/\s+/g, " ");
+
+const resolveCanonicalTrackName = (track: string) => {
+  const normalized = normalizeTrackName(track);
+  return ALL_TRACKS.find((t) => normalizeTrackName(t) === normalized) || track.trim();
+};
+
 // API Helper to get all records
 function mapPgRowToRecord(row: any) {
   return {
     id: Number(row.id),
-    track: row.track,
+    track: resolveCanonicalTrackName(row.track),
     year: row.year,
     teacherName: row.teacher_name,
     subject: row.subject,
@@ -796,8 +818,9 @@ async function getRecords() {
 // API Helper to save/update a record
 async function saveRecord(item: any) {
   await checkDbModeOnRequest();
+  const canonicalTrack = resolveCanonicalTrackName(item.track || "");
   const dbPayload = {
-    track: item.track,
+    track: canonicalTrack,
     year: item.year,
     teacher_name: item.teacherName,
     subject: item.subject,
@@ -819,6 +842,8 @@ async function saveRecord(item: any) {
     grade_timing: item.gradeTiming || "ציון אחד בסוף שנה",
     monthly_hours: item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
   };
+  // Supabase REST schema may lag behind PG migrations — omit optional columns not yet in cache
+  const { lesson_name: _lessonName, ...restDbPayload } = dbPayload;
 
   // Mode 1: Direct Postgres Pool
   const pool = getDbPool();
@@ -877,7 +902,7 @@ async function saveRecord(item: any) {
         const res = await supabaseFetch(`/salary_records?id=eq.${item.id}`, {
           method: "PATCH",
           headers: { "Prefer": "return=representation" },
-          body: JSON.stringify(dbPayload)
+          body: JSON.stringify(restDbPayload)
         });
         const updatedRows = await res.json();
         if (updatedRows && updatedRows.length > 0) {
@@ -888,7 +913,7 @@ async function saveRecord(item: any) {
         const res = await supabaseFetch("/salary_records", {
           method: "POST",
           headers: { "Prefer": "return=representation" },
-          body: JSON.stringify(dbPayload)
+          body: JSON.stringify(restDbPayload)
         });
         const insertedRows = await res.json();
         if (insertedRows && insertedRows.length > 0) {
@@ -1098,6 +1123,31 @@ app.get("/api/records", async (req, res) => {
     }
     const records = await getRecords();
     res.json({ success: true, dbMode, records });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/records/stats", async (req, res) => {
+  try {
+    const records = await getRecords();
+    const counts: Record<string, number> = {};
+    ALL_TRACKS.forEach((track) => {
+      counts[track] = 0;
+    });
+    let unknownTrack = 0;
+    for (const row of records) {
+      const canonical = resolveCanonicalTrackName(row.track || "");
+      if (counts[canonical] !== undefined) counts[canonical] += 1;
+      else unknownTrack += 1;
+    }
+    res.json({
+      success: true,
+      dbMode,
+      total: records.length,
+      counts,
+      unknownTrack,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
