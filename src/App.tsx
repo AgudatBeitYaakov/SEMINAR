@@ -84,6 +84,7 @@ const SEMESTER_OPTIONS = [
 const GRADE_TIMING_OPTIONS = [
   "ציון אחד בסוף שנה",
   "ציון בכל מחצית",
+  "ציון בסיום מחצית א' ובמחצית ב'",
   "ציון בסיום קורס",
   "ללא ציון",
 ];
@@ -103,6 +104,8 @@ const YEAR_OPTIONS_DETAILED = [
   "יד1+יד2",
   "הוראה יג",
   "הוראה יד",
+  "הוראה+גננות יג",
+  "הוראה+גננות יד",
   "כל הסמינר",
   "יג1+יג2",
 ];
@@ -1790,9 +1793,27 @@ export default function App() {
   // Add empty row
   const handleAddNewRow = () => {
     if (!canModify) return;
-    if (records.some((r) => r.id < 0)) {
-      triggerAlert("ישנה שורה חדשה שנמצאת כעת בעריכה. אנא שמרי או בטלי אותה תחילה!", "info", "שורה בעריכה");
-      return;
+
+    const existingDraft = records.find((r) => r.id < 0);
+    if (existingDraft) {
+      const sameTrack =
+        role !== "coordinator" ||
+        !activeTrack ||
+        normalizeTrack(existingDraft.track) === normalizeTrack(activeTrack);
+      if (sameTrack) {
+        loadEditBuffers(existingDraft);
+        setActiveEditingId(existingDraft.id);
+        setEditModalId(null);
+        if (filterStatus !== "all") setFilterStatus("all");
+        triggerAlert(
+          "ישנה שורה חדשה בעריכה — היא מוצגת כעת. מלאי ושמרי, או לחצי ביטול.",
+          "info",
+          "שורה בעריכה"
+        );
+        return;
+      }
+      // טיוטה ישנה ממסלול אחר — מסירים כדי לא לחסום הוספה
+      setRecords((prev) => prev.filter((r) => r.id !== existingDraft.id));
     }
 
     const tempId = -Math.floor(Math.random() * 100000) - 1;
@@ -2358,6 +2379,10 @@ export default function App() {
       }
 
       if (filterTrack !== "all" && normalizeTrack(item.track) !== selectedTrack) return false;
+
+      // טיוטות בעריכה — תמיד גלויות (לא מוסתרות ע"י סינון סטטוס/שנה)
+      if (item.id < 0) return true;
+
       if (filterJobType !== "all" && item.paymentMethod !== filterJobType) return false;
       if (filterYear !== "all" && item.year !== filterYear) return false;
 
