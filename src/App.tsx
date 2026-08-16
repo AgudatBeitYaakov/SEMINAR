@@ -14,7 +14,6 @@ import {
   Download,
   Printer,
   Copy,
-  RotateCcw,
   Lock,
   Unlock,
   LogOut,
@@ -576,6 +575,8 @@ export default function App() {
   const [records, setRecords] = useState<SalaryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeEditingId, setActiveEditingId] = useState<number | null>(null);
+  /** true כשהטיוטה נפתחה משכפול משרה (רק לכותרת הטופס) */
+  const [draftIsDuplicate, setDraftIsDuplicate] = useState(false);
 
   // Form Editing Buffers
   const [editTrack, setEditTrack] = useState("");
@@ -826,6 +827,7 @@ export default function App() {
   const finalizeRowSave = async (savedRowId: number) => {
     setActiveEditingId(null);
     setEditModalId(null);
+    setDraftIsDuplicate(false);
     await fetchRecords(savedRowId < 0 ? savedRowId : undefined);
   };
 
@@ -1851,6 +1853,88 @@ export default function App() {
     // Inline editing directly in the table (no pop-up) for the new draft row.
     setActiveEditingId(tempId);
     setEditModalId(null);
+    setDraftIsDuplicate(false);
+  };
+
+  /** שכפול משרה שמורה → טיוטה חדשה ממולאת (ללא אישור/חוזה/שעות חודשיות) */
+  const handleDuplicateRow = (source: SalaryRecord) => {
+    if (!canModify) return;
+    if (source.id < 0) return;
+
+    if (
+      role === "coordinator" &&
+      activeTrack &&
+      normalizeTrack(source.track) !== normalizeTrack(activeTrack)
+    ) {
+      return;
+    }
+
+    const existingDraft = records.find((r) => r.id < 0);
+    if (existingDraft) {
+      const sameTrack =
+        role !== "coordinator" ||
+        !activeTrack ||
+        normalizeTrack(existingDraft.track) === normalizeTrack(activeTrack);
+      if (sameTrack) {
+        loadEditBuffers(existingDraft);
+        setActiveEditingId(existingDraft.id);
+        setEditModalId(null);
+        if (filterStatus !== "all") setFilterStatus("all");
+        triggerAlert(
+          "ישנה שורה חדשה בעריכה — שמרי או בטלי אותה לפני שכפול משרה נוספת.",
+          "info",
+          "שורה בעריכה"
+        );
+        return;
+      }
+      setRecords((prev) => prev.filter((r) => r.id !== existingDraft.id));
+    }
+
+    const tempId = -Math.floor(Math.random() * 100000) - 1;
+    const track =
+      role === "coordinator" && activeTrack
+        ? activeTrack
+        : resolveCanonicalTrack(source.track);
+    const calcs = computeCalculations(
+      source.shash,
+      source.meetings,
+      source.rate,
+      source.paymentMethod
+    );
+
+    const newRow: SalaryRecord = {
+      id: tempId,
+      track,
+      year: source.year,
+      teacherName: source.teacherName,
+      subject: source.subject,
+      lessonName: source.lessonName,
+      semester: source.semester,
+      paymentMethod: source.paymentMethod,
+      shash: source.shash,
+      meetings: source.meetings,
+      totalHours: calcs.totalHours,
+      rate: source.rate,
+      employerOverhead: calcs.employerOverhead,
+      totalAnnual: calcs.totalAnnual,
+      tz: source.tz,
+      phone: source.phone,
+      email: source.email,
+      isApproved: false,
+      isContractReady: false,
+      travel: source.travel || "בית שמש",
+      gradeTiming: source.gradeTiming || "ציון אחד בסוף שנה",
+      monthlyHours: {},
+    };
+
+    setRecords((prev) => [newRow, ...prev]);
+    loadEditBuffers(newRow);
+    if (filterStatus === "saved") {
+      setFilterStatus("all");
+    }
+    setActiveEditingId(tempId);
+    setEditModalId(null);
+    setDraftIsDuplicate(true);
   };
 
   // Loads a row's values into the shared edit buffers (used by both inline add and modal edit).
@@ -1890,6 +1974,7 @@ export default function App() {
     }
     setActiveEditingId(null);
     setEditModalId(null);
+    setDraftIsDuplicate(false);
   };
 
   // Save changes to Postgres DB
@@ -2051,6 +2136,7 @@ export default function App() {
         localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
         setActiveEditingId(null);
         setEditModalId(null);
+        setDraftIsDuplicate(false);
         setRecords((prev) => {
           const withoutSavedDraft = id < 0 ? prev.filter((row) => row.id !== id) : prev;
           const next = mergeServerRecords(withoutSavedDraft, localRows);
@@ -2064,52 +2150,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRecalculateAllRecords = () => {
-    if (role !== "director" && role !== "secretary") return;
-
-    const toUpdate = records
-      .filter((row) => row.id > 0)
-      .map((row) => applyCalculationsToRecord(row))
-      .filter((row) => {
-        const original = records.find((r) => r.id === row.id);
-        if (!original) return false;
-        return (
-          original.totalHours !== row.totalHours ||
-          original.totalAnnual !== row.totalAnnual ||
-          original.employerOverhead !== row.employerOverhead
-        );
-      });
-
-    if (toUpdate.length === 0) {
-      triggerAlert("כל השורות כבר מחושבות לפי הנוסחה העדכנית.", "success");
-      return;
-    }
-
-    triggerConfirm(
-      `לעדכן ${toUpdate.length} שורות לפי נוסחת החישוב העדכנית (כולל תקן)?`,
-      async () => {
-        setLoading(true);
-        let successCount = 0;
-        for (const row of toUpdate) {
-          try {
-            const response = await fetch("/api/records", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(row),
-            });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.success) successCount++;
-            }
-          } catch {}
-        }
-        await fetchRecords();
-        triggerAlert(`עודכנו ${successCount} מתוך ${toUpdate.length} שורות בהצלחה.`, "success");
-        setLoading(false);
-      }
-    );
   };
 
   const handleDeleteRow = (id: number, teacherName: string) => {
@@ -3330,18 +3370,6 @@ export default function App() {
                       <FileText className="w-3.5 h-3.5" />
                       <span>דוח סופי 📋</span>
                     </button>
-
-                    {(role === "director" || role === "secretary") && (
-                      <button
-                        onClick={handleRecalculateAllRecords}
-                        disabled={loading}
-                        className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-1.5 rounded-lg text-xs shadow-sm transition duration-150 flex items-center gap-1.5 cursor-pointer w-full sm:w-auto justify-center h-9"
-                        title="מחשב מחדש שעות ושכר לכל השורות לפי הנוסחה העדכנית"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>חשב מחדש שכר</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -3500,7 +3528,11 @@ export default function App() {
                                     <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
                                       <Plus className="w-3.5 h-3.5" />
                                     </span>
-                                    <h4 className="text-sm font-black text-emerald-900">הוספת משרה חדשה - מילוי ישיר בטבלה 🌾</h4>
+                                    <h4 className="text-sm font-black text-emerald-900">
+                                      {draftIsDuplicate
+                                        ? "שכפול משרה — הפרטים הועתקו, ניתן לערוך לפני שמירה 🌾"
+                                        : "הוספת משרה חדשה - מילוי ישיר בטבלה 🌾"}
+                                    </h4>
                                   </div>
 
                                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -3915,6 +3947,13 @@ export default function App() {
                                   ) : item.isApproved && role === "coordinator" ? (
                                     <>
                                       <button
+                                        onClick={() => handleDuplicateRow(item)}
+                                        className="text-[10px] bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                        title="שכפול משרה לשורה חדשה"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
                                         onClick={() => openSimulatorModal(item)}
                                         className="text-[10px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-extrabold px-2 py-1 rounded transition cursor-pointer flex items-center gap-1"
                                         title="הגשת בקשת עדכון משרה"
@@ -3931,6 +3970,13 @@ export default function App() {
                                     </>
                                   ) : (
                                     <>
+                                      <button
+                                        onClick={() => handleDuplicateRow(item)}
+                                        className="text-[10px] bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-extrabold p-1.5 rounded transition cursor-pointer"
+                                        title="שכפול משרה לשורה חדשה"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
                                       <button
                                         onClick={() => handleEditRowStart(item)}
                                         className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold p-1.5 rounded transition cursor-pointer"
