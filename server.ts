@@ -597,6 +597,10 @@ async function writeSystemConfig<T>(
     }
   }
   fs.writeFileSync(localPath, JSON.stringify(value, null, 2), "utf8");
+  // אם הענן מוגדר אבל השמירה אליו נכשלה — לא מדווחים הצלחה שקטה
+  if ((process.env.DATABASE_URL || hasSupabaseRest) && !savedToDb) {
+    throw new Error(`Failed to persist ${key} to cloud database`);
+  }
   return savedToDb;
 }
 
@@ -709,11 +713,18 @@ app.put(
       }
       nextEmails[track] = email;
     }
-    await writeSystemConfig(
-      "coordinator_emails",
-      LOCAL_COORDINATOR_EMAILS_PATH,
-      nextEmails
-    );
+    try {
+      await writeSystemConfig(
+        "coordinator_emails",
+        LOCAL_COORDINATOR_EMAILS_PATH,
+        nextEmails
+      );
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Failed to save coordinator emails to cloud",
+      });
+    }
     const visibleEmails =
       session.role === "director"
         ? nextEmails
@@ -860,7 +871,7 @@ async function saveRecord(item: any) {
            WHERE id = $22
            RETURNING *`,
           [
-            item.track, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
+            canonicalTrack, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
             item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
             item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}",
@@ -879,7 +890,7 @@ async function saveRecord(item: any) {
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
            RETURNING *`,
           [
-            item.track, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
+            canonicalTrack, item.year, item.teacherName, item.subject, item.lessonName || "", item.semester, item.paymentMethod,
             item.shash, item.meetings, item.totalHours, item.rate, item.employerOverhead, item.totalAnnual,
             item.tz, item.phone, item.email, item.isApproved, item.isContractReady,
             item.travel || "בית שמש", item.gradeTiming || "ציון אחד בסוף שנה", item.monthlyHours ? JSON.stringify(item.monthlyHours) : "{}"
@@ -974,7 +985,12 @@ async function deleteRecord(id: number) {
     }
   }
 
-  // Fallback delete to local file
+  // Cloud configured: never pretend local-only delete succeeded
+  if (process.env.DATABASE_URL || hasSupabaseRest) {
+    throw new Error("Failed to delete record from cloud database");
+  }
+
+  // Fallback delete to local file (local-only mode)
   const localRecords = await getRecords();
   const updated = localRecords.filter((r: any) => r.id !== id);
   fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(updated, null, 2), "utf-8");
@@ -1080,9 +1096,19 @@ async function saveChangeRequest(request: any) {
     }
   }
 
-  const localRequests = await getChangeRequests();
-  const updated = [...localRequests.filter((r: any) => r.requestId !== requestId), { ...request, requestId }];
-  fs.writeFileSync(LOCAL_CHANGE_REQUESTS_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  // Mirror locally for recovery, but fail loudly when cloud is expected
+  try {
+    const localRequests = await getChangeRequests();
+    const updated = [...localRequests.filter((r: any) => r.requestId !== requestId), { ...request, requestId }];
+    fs.writeFileSync(LOCAL_CHANGE_REQUESTS_PATH, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (mirrorErr) {
+    console.error("Local change-request mirror failed:", mirrorErr);
+  }
+
+  if (process.env.DATABASE_URL || hasSupabaseRest) {
+    throw new Error("Failed to persist change request to cloud database");
+  }
+
   return { ...request, requestId };
 }
 
@@ -1106,6 +1132,10 @@ async function deleteChangeRequest(id: number) {
     } catch (err) {
       console.error("Error deleting change request from Supabase REST:", err);
     }
+  }
+
+  if (process.env.DATABASE_URL || hasSupabaseRest) {
+    throw new Error("Failed to delete change request from cloud database");
   }
 
   const localRequests = await getChangeRequests();
@@ -1275,8 +1305,15 @@ app.post("/api/passwords", requireRoles(["director"]), async (req, res) => {
   ) {
     return res.status(400).json({ success: false, error: "Invalid passwords" });
   }
-  await writeSystemConfig("passwords", LOCAL_PASSWORDS_PATH, newPasswords);
-  res.json({ success: true, dbMode, passwords: newPasswords });
+  try {
+    await writeSystemConfig("passwords", LOCAL_PASSWORDS_PATH, newPasswords);
+    res.json({ success: true, dbMode, passwords: newPasswords });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err?.message || "Failed to save passwords to cloud",
+    });
+  }
 });
 
 // Endpoint to force reload of DB configuration if user sets/updates DATABASE_URL

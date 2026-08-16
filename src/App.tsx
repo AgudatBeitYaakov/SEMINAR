@@ -648,6 +648,13 @@ export default function App() {
 
   const canModify = role !== "guest" && role !== "viewer";
 
+  /** האם המערכת אמורה לשמור בענן המשותף (לא במצב מקומי בלבד) */
+  const expectsCloudConnection = () =>
+    dbMode === "cloud" ||
+    cloudConnectionStyle !== "none" ||
+    Boolean(localStorage.getItem("sz_supabase_url")) ||
+    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+
   // DB payload mapping helpers
   const mapRecordToDb = (item: any, forRest = false) => {
     const payload: Record<string, unknown> = {
@@ -885,7 +892,9 @@ export default function App() {
     }
   };
 
-  const persistChangeRequest = async (request: ChangeRequest) => {
+  const persistChangeRequest = async (
+    request: ChangeRequest
+  ): Promise<{ request: ChangeRequest; cloudOk: boolean }> => {
     // תמיד שומרים מקומית מיד — כדי שלא תיאבד הבקשה ברענון
     const optimistic = [...changeRequests.filter((r) => r.requestId !== request.requestId), request];
     setChangeRequests(optimistic);
@@ -904,32 +913,37 @@ export default function App() {
           const updated = [...optimistic.filter((r) => r.requestId !== saved.requestId), saved];
           setChangeRequests(updated);
           localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
-          return saved;
+          return { request: saved, cloudOk: true };
         }
       }
       throw new Error("Save change request failed");
     } catch (err) {
       console.warn("Express save change request failed; kept in local queue:", err);
-      return request;
+      return { request, cloudOk: false };
     }
   };
 
-  const removeChangeRequest = async (requestId: number) => {
+  const removeChangeRequest = async (requestId: number): Promise<boolean> => {
     try {
       const response = await fetch(`/api/change-requests/${requestId}`, { method: "DELETE" });
       if (response.ok) {
         const updated = changeRequests.filter((r) => r.requestId !== requestId);
         setChangeRequests(updated);
         localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
-        return;
+        return true;
       }
     } catch (err) {
       console.warn("Express delete change request failed:", err);
     }
 
+    if (expectsCloudConnection()) {
+      return false;
+    }
+
     const updated = changeRequests.filter((r) => r.requestId !== requestId);
     setChangeRequests(updated);
     localStorage.setItem("sz_change_requests_queue", JSON.stringify(updated));
+    return true;
   };
 
   const openSimulatorModal = (row: SalaryRecord) => {
@@ -1014,15 +1028,18 @@ export default function App() {
     if (isDeleteRequest) {
       // מחיקת המשרה והתקציב שלה לאחר אישור מזכירה/מנהלת
       const rowId = req.rowId;
-      setRecords((prev) => prev.filter((r) => r.id !== rowId));
       setLoading(true);
+      let deleted = false;
       try {
         const response = await fetch(`/api/records/${rowId}`, { method: "DELETE" });
-        if (!response.ok) throw new Error("Delete failed");
+        deleted = response.ok;
       } catch {
+        deleted = false;
+      }
+
+      if (!deleted) {
         const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
         const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-        let deleted = false;
         if (sUrl && sKey && rowId > 0) {
           try {
             const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${rowId}`, {
@@ -1032,15 +1049,27 @@ export default function App() {
             deleted = res.ok;
           } catch {}
         }
-        if (!deleted) {
-          const localData = localStorage.getItem("sz_local_records_v2");
-          let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
-          localRows = localRows.filter((r) => r.id !== rowId);
-          localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
-        }
-      } finally {
-        setLoading(false);
       }
+
+      if (!deleted) {
+        setLoading(false);
+        if (expectsCloudConnection()) {
+          triggerAlert(
+            "המשרה לא נמחקה בענן — שום דבר לא נמחק במערכת המשותפת. בדקי חיבור ונסי שוב.",
+            "error",
+            "מחיקה נכשלה"
+          );
+          await fetchRecords();
+          return;
+        }
+        const localData = localStorage.getItem("sz_local_records_v2");
+        let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+        localRows = localRows.filter((r) => r.id !== rowId);
+        localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+      }
+
+      setRecords((prev) => prev.filter((r) => r.id !== rowId));
+      setLoading(false);
 
       await sendResultNotification({
         status: "approved",
@@ -1049,7 +1078,14 @@ export default function App() {
         subject: req.current.subject,
         track: req.track,
       });
-      await removeChangeRequest(requestId);
+      const removed = await removeChangeRequest(requestId);
+      if (!removed && expectsCloudConnection()) {
+        triggerAlert(
+          "המשרה נמחקה, אך הסרת הבקשה מהענן נכשלה. רענני את התור.",
+          "info",
+          "שים לב"
+        );
+      }
       await fetchRecords();
       await fetchChangeRequests();
       setShowRequestsQueueModal(false);
@@ -1075,18 +1111,24 @@ export default function App() {
       setRecords((prev) => prev.map((r) => (r.id === updatedRow.id ? updatedRow : r)));
 
       setLoading(true);
+      let savedToCloud = false;
       try {
         const response = await fetch("/api/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updatedRow),
         });
-        if (!response.ok) throw new Error("Save failed");
+        if (response.ok) {
+          const data = await response.json();
+          savedToCloud = Boolean(data.success);
+        }
       } catch {
-        // Direct Supabase REST fallback, then local storage.
+        savedToCloud = false;
+      }
+
+      if (!savedToCloud) {
         const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
         const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-        let savedToCloud = false;
         if (sUrl && sKey && updatedRow.id > 0) {
           try {
             const res = await fetch(`${sUrl}/rest/v1/salary_records?id=eq.${updatedRow.id}`, {
@@ -1101,15 +1143,25 @@ export default function App() {
             savedToCloud = res.ok;
           } catch {}
         }
-        if (!savedToCloud) {
-          const localData = localStorage.getItem("sz_local_records_v2");
-          let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
-          localRows = localRows.map((r) => (r.id === updatedRow.id ? updatedRow : r));
-          localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
-        }
-      } finally {
-        setLoading(false);
       }
+
+      if (!savedToCloud) {
+        setLoading(false);
+        if (expectsCloudConnection()) {
+          triggerAlert(
+            "המשרה לא עודכנה בענן — השינוי לא נשמר במערכת המשותפת. בדקי חיבור ונסי שוב.",
+            "error",
+            "עדכון נכשל"
+          );
+          await fetchRecords();
+          return;
+        }
+        const localData = localStorage.getItem("sz_local_records_v2");
+        let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
+        localRows = localRows.map((r) => (r.id === updatedRow.id ? updatedRow : r));
+        localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
+      }
+      setLoading(false);
     }
 
     await sendResultNotification({
@@ -1119,7 +1171,14 @@ export default function App() {
       subject: req.proposed.subject,
       track: req.track,
     });
-    await removeChangeRequest(requestId);
+    const removed = await removeChangeRequest(requestId);
+    if (!removed && expectsCloudConnection()) {
+      triggerAlert(
+        "המשרה עודכנה, אך הסרת הבקשה מהענן נכשלה. רענני את התור.",
+        "info",
+        "שים לב"
+      );
+    }
     await fetchRecords();
     await fetchChangeRequests();
     setShowRequestsQueueModal(false);
@@ -1157,7 +1216,15 @@ export default function App() {
       rejectedBy,
     };
 
-    await persistChangeRequest(updatedReq);
+    const persistResult = await persistChangeRequest(updatedReq);
+    if (!persistResult.cloudOk && expectsCloudConnection()) {
+      triggerAlert(
+        "הדחייה לא נשמרה בענן — הרכזת לא תראה את ההערה במערכת המשותפת. בדקי חיבור ונסי שוב.",
+        "error",
+        "לא נשמר בענן"
+      );
+      return;
+    }
     await sendResultNotification({
       status: "rejected",
       requestType: req.requestType || "change",
@@ -1173,7 +1240,14 @@ export default function App() {
   };
 
   const dismissRejectedRequest = async (requestId: number) => {
-    await removeChangeRequest(requestId);
+    const removed = await removeChangeRequest(requestId);
+    if (!removed && expectsCloudConnection()) {
+      triggerAlert(
+        "לא ניתן להסיר את הבקשה מהענן. בדקי חיבור ונסי שוב.",
+        "error",
+        "הסרה נכשלה"
+      );
+    }
     await fetchChangeRequests();
   };
 
@@ -1226,7 +1300,15 @@ export default function App() {
 
     setLoading(true);
     try {
-      await persistChangeRequest(rejectedRequest);
+      const persistResult = await persistChangeRequest(rejectedRequest);
+      if (!persistResult.cloudOk && expectsCloudConnection()) {
+        triggerAlert(
+          "הדחייה לא נשמרה בענן — המשרה לא נמחקה. בדקי חיבור ונסי שוב.",
+          "error",
+          "לא נשמר בענן"
+        );
+        return;
+      }
 
       let deleted = false;
       try {
@@ -1261,6 +1343,15 @@ export default function App() {
       }
 
       if (!deleted) {
+        if (expectsCloudConnection()) {
+          triggerAlert(
+            "המשרה לא נמחקה בענן — שום דבר לא נמחק במערכת המשותפת. בדקי חיבור ונסי שוב.",
+            "error",
+            "מחיקה נכשלה"
+          );
+          await fetchRecords();
+          return;
+        }
         try {
           const localData = localStorage.getItem("sz_local_records_v2");
           const localRows: SalaryRecord[] = localData
@@ -1335,12 +1426,24 @@ export default function App() {
     setRecords((prev) => prev.map((r) => (r.id === teacherId ? updatedRow : r)));
 
     try {
-      await fetch("/api/records", {
+      const response = await fetch("/api/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedRow),
       });
+      if (!response.ok) throw new Error("Cloud save failed");
+      const data = await response.json();
+      if (!data.success) throw new Error("Cloud save failed");
     } catch {
+      if (expectsCloudConnection()) {
+        setRecords((prev) => prev.map((r) => (r.id === teacherId ? target : r)));
+        triggerAlert(
+          "דיווח השעות לא נשמר בענן — הערך לא עודכן במערכת המשותפת. בדקי חיבור ונסי שוב.",
+          "error",
+          "לא נשמר בענן"
+        );
+        return;
+      }
       const localData = localStorage.getItem("sz_local_records_v2");
       let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
       localRows = localRows.map((r) => (r.id === teacherId ? updatedRow : r));
@@ -1736,8 +1839,17 @@ export default function App() {
       timestamp: new Date().toLocaleString("he-IL"),
     };
 
-    await persistChangeRequest(request);
+    const persistResult = await persistChangeRequest(request);
     await fetchChangeRequests();
+    if (!persistResult.cloudOk && expectsCloudConnection()) {
+      triggerAlert(
+        "הבקשה נשמרה במחשב זה בלבד — לא עלתה לענן המשותף. בדקי חיבור ונסי שוב.",
+        "error",
+        "לא נשמר בענן"
+      );
+      setCoordinatorSubmitNotice("שים לב: הבקשה לא עלתה לענן. נסי שוב כשהחיבור תקין.");
+      return;
+    }
     setCoordinatorSubmitNotice("הבקשה נשלחה בהצלחה! המזכירה/מנהלת יראו אותה תחת ״בקשות ממתינות״.");
     closeSimulatorModal();
   };
@@ -1785,9 +1897,19 @@ export default function App() {
           proposed: snapshot,
           timestamp: new Date().toLocaleString("he-IL"),
         };
-        await persistChangeRequest(request);
-        await fetchChangeRequests();
-        setCoordinatorSubmitNotice("בקשת המחיקה נשלחה לאישור. המזכירה/מנהלת יאשרו או ידחו עם הערה.");
+        await persistChangeRequest(request).then(async (persistResult) => {
+          await fetchChangeRequests();
+          if (!persistResult.cloudOk && expectsCloudConnection()) {
+            triggerAlert(
+              "בקשת המחיקה נשמרה במחשב זה בלבד — לא עלתה לענן. בדקי חיבור ונסי שוב.",
+              "error",
+              "לא נשמר בענן"
+            );
+            setCoordinatorSubmitNotice("שים לב: בקשת המחיקה לא עלתה לענן. נסי שוב כשהחיבור תקין.");
+            return;
+          }
+          setCoordinatorSubmitNotice("בקשת המחיקה נשלחה לאישור. המזכירה/מנהלת יאשרו או ידחו עם הערה.");
+        });
       }
     );
   };
@@ -2100,13 +2222,7 @@ export default function App() {
       }
 
       // Local storage fallback only when cloud is not configured/expected
-      const expectsCloud =
-        dbMode === "cloud" ||
-        cloudConnectionStyle !== "none" ||
-        Boolean(localStorage.getItem("sz_supabase_url")) ||
-        Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-
-      if (expectsCloud) {
+      if (expectsCloudConnection()) {
         triggerAlert(
           "השמירה לענן נכשלה — הנתונים לא נשמרו במערכת המשותפת! בדקי חיבור לאינטרנט ונסי שוב.",
           "error",
@@ -2192,7 +2308,16 @@ export default function App() {
           }
         }
 
-        // Local storage delete
+        if (expectsCloudConnection()) {
+          triggerAlert(
+            "המחיקה מהענן נכשלה — המשרה לא נמחקה במערכת המשותפת. בדקי חיבור ונסי שוב.",
+            "error",
+            "מחיקה נכשלה"
+          );
+          return;
+        }
+
+        // Local storage delete (local-only mode)
         try {
           const localData = localStorage.getItem("sz_local_records_v2");
           if (localData) {
@@ -2286,7 +2411,17 @@ export default function App() {
         }
       }
 
-      // Local storage toggle approval fallback
+      // Local storage toggle approval fallback — only when cloud is not expected
+      if (expectsCloudConnection()) {
+        triggerAlert(
+          `סטטוס האישור של "${row.teacherName}" לא עודכן בענן. בדקי חיבור ונסי שוב.`,
+          "error",
+          "לא נשמר בענן"
+        );
+        await fetchRecords();
+        return;
+      }
+
       try {
         const localData = localStorage.getItem("sz_local_records_v2");
         if (localData) {
@@ -2583,6 +2718,7 @@ export default function App() {
     try {
       const sUrl = localStorage.getItem("sz_supabase_url") || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
       const sKey = localStorage.getItem("sz_supabase_key") || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+      let anyCloudFailure = false;
 
       for (const updated of updatedRows) {
         let saved = false;
@@ -2615,11 +2751,25 @@ export default function App() {
         }
 
         if (!saved) {
+          if (expectsCloudConnection()) {
+            anyCloudFailure = true;
+            continue;
+          }
           const localData = localStorage.getItem("sz_local_records_v2");
           let localRows: SalaryRecord[] = localData ? JSON.parse(localData) : records;
           localRows = localRows.map((r) => (r.id === updated.id ? updated : r));
           localStorage.setItem("sz_local_records_v2", JSON.stringify(localRows));
         }
+      }
+
+      if (anyCloudFailure) {
+        triggerAlert(
+          "סטטוס החוזה לא עודכן במלואו בענן. בדקי חיבור ונסי שוב.",
+          "error",
+          "לא נשמר בענן"
+        );
+        await fetchRecords();
+        return;
       }
 
       setShowContractModal(false);
