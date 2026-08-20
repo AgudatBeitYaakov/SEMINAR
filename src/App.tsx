@@ -245,19 +245,45 @@ interface ContractContent {
   teacherName: string;
   tz: string;
   pronounTeacher: string;
+  idHolderLabel: string;
   prefixSheHe: string;
   suffixHeShe: string;
   suffixWorkHeShe: string;
   suffixTeachHeShe: string;
   pronounSuffix: string;
   suffixSigned: string;
+  tracksLabel: string;
   rowDetails: string[];
   commitmentLine: string;
   teachingRequirement: string;
+  travelLine: string;
+  reportingLine: string;
 }
 
 const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+const buildTravelLine = (rows: SalaryRecord[]) => {
+  const allReceiptLike = rows.every(
+    (r) => r.paymentMethod === "קבלה" || r.paymentMethod === "קבלת פטור"
+  );
+  if (allReceiptLike) {
+    return "תשלום נסיעות: כלול בשכר";
+  }
+
+  const travels = Array.from(
+    new Set(rows.map((r) => (r.travel || "בית שמש").trim()).filter(Boolean))
+  );
+  const travelValue = travels.length === 1 ? travels[0] : travels.join(" / ");
+
+  if (!travelValue || travelValue === "בית שמש") {
+    return "תשלום נסיעות: כלול בשכר";
+  }
+  if (travelValue === "אחר / ללא") {
+    return "תשלום נסיעות: _________";
+  }
+  return `תשלום נסיעות: ממקום מגורים ב${travelValue}`;
+};
 
 const buildContractContent = (
   activeContractRecord: SalaryRecord,
@@ -269,6 +295,7 @@ const buildContractContent = (
       ? "הרב"
       : "הגב'";
   const pronounTeacher = prefix === "הרב" ? "העובד" : "העובדת";
+  const idHolderLabel = prefix === "הרב" ? "נושא ת.ז.:" : "נושאת ת.ז.:";
   const prefixSheHe = prefix === "הרב" ? "המורה יאפשר" : "המורה תאפשר";
   const suffixHeShe = prefix === "הרב" ? "אינו מועסק" : "אינה מועסקת";
   const suffixWorkHeShe = prefix === "הרב" ? "עבודתו" : "עבודתה";
@@ -281,9 +308,14 @@ const buildContractContent = (
     (r) => r.teacherName && r.teacherName.trim().toLowerCase() === nameLower
   );
 
+  const tracksLabel = Array.from(
+    new Set(teacherRows.map((r) => r.track).filter(Boolean))
+  ).join(", ");
+
   const rowDetails: string[] = [];
   let hasTenure = false;
   let hasLecturer = false;
+  let hasReceipt = false;
 
   teacherRows.forEach((row) => {
     const formattedSemester = formatSemesterDisplay(row.semester).includes("מחצית א'")
@@ -303,36 +335,58 @@ const buildContractContent = (
     let pType = "בשכר מרצים";
     if (row.paymentMethod === "קבלה") {
       pType = "בקבלה";
+      hasReceipt = true;
     } else if (row.paymentMethod === "קבלת פטור") {
       pType = "בפטור";
+      hasReceipt = true;
     } else {
       hasLecturer = true;
     }
 
+    const rateSuffix =
+      row.paymentMethod === "קבלה"
+        ? `${row.rate} ₪ לש' כולל מע"מ. תמורת קבלה שתוגש ע"י ${pronounTeacher}.`
+        : `${row.rate} ₪ ברוטו לש'`;
+
     rowDetails.push(
-      `(${row.track}) ${row.totalHours} ש' ${formatSubjectDisplay(row.subject)}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${row.rate} ₪ ברוטו לשעה`
+      `(${row.track}) ${row.totalHours} ש' ${formatSubjectDisplay(row.subject)}, כיתה ${row.year} – ${formattedSemester} ${pType} בתעריף ${rateSuffix}`
     );
   });
 
   let commitmentLine = "";
   let teachingRequirement = "";
+  let reportingLine = "";
 
   if (hasTenure && hasLecturer) {
     commitmentLine =
-      'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות תקן וכשעות שכר מרצים במהלך שנה"ל תשפ"ז. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
+      'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות תקן וכשעות שכר מרצים במהלך שנה"ל תשפ"ז בכפוף למסמכים שהוגשו ע"י ' +
+      pronounTeacher +
+      '. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
     teachingRequirement = `על המורה ללמד 30 שיעורים בשנה עבור כל ש"ש בתקן, וכן לעמוד במכסת שיעורי שכר המרצים כפי שסוכם. במקרה ולא בוצעה מכסת השיעורים עפ"י החישוב הנ"ל, ${suffixTeachHeShe} את יתרת השיעורים בקורסי קיץ / תגבור מעבר למערכת הלימודים.`;
   } else if (hasTenure) {
     commitmentLine =
-      'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות תקן במהלך שנה"ל תשפ"ז. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
+      'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות תקן במהלך שנה"ל תשפ"ז בכפוף למסמכים שהוגשו ע"י ' +
+      pronounTeacher +
+      '. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
     teachingRequirement = `על המורה ללמד 30 שיעורים בשנה עבור כל ש"ש בתקן. במקרה ולא בוצעה מכסת השיעורים עפ"י החישוב הנ"ל, ${suffixTeachHeShe} את יתרת השיעורים בקורסי קיץ / תגבור מעבר למערכת הלימודים.`;
   } else if (hasLecturer) {
     commitmentLine =
       'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות שכר מרצים במהלך שנה"ל תשפ"ז. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
-    teachingRequirement = `על המורה ללמד את מכסת השיעורים עפ"י החישוב הנ"ל. במקרה ולא בוצעה המכסה, ${suffixTeachHeShe} את יתרת השיעורים בקורסי קיץ / תגבור מעבר למערכת הלימודים.`;
+    teachingRequirement = "";
+    reportingLine =
+      prefix === "הרב"
+        ? "קבלת השכר מותנה בהגשת דיווח מרוכז של שעות ההוראה בחודש לועזי, שהעובד יגיש בסיום חודש לועזי במזכירות."
+        : "קבלת השכר מותנה בהגשת דיווח מרוכז של שעות ההוראה בחודש לועזי, שהעובדת תגיש בסיום חודש לועזי במזכירות.";
   } else {
     commitmentLine =
       'אגודת בית יעקב מתחייבת לשלם את שעות עבודתך כשעות עבודה חיצוניות / קבלה במהלך שנה"ל תשפ"ז. התחייבות זו הינה בתוקף לשנה"ל תשפ"ז בלבד.';
-    teachingRequirement = `על המורה ללמד את מכסת השיעורים עפ"י החישוב הנ"ל. במקרה ולא בוצעה המכסה, ${suffixTeachHeShe} את יתרת השיעורים בקורסי קיץ / תגבור מעבר למערכת הלימודים.`;
+    teachingRequirement = "";
+    if (hasReceipt) {
+      reportingLine =
+        prefix === "הרב"
+          ? "קבלת השכר מותנה בהגשת דיווח מרוכז של שעות ההוראה בחודש לועזי, שהעובד יגיש בסיום חודש לועזי במזכירות."
+          : "קבלת השכר מותנה בהגשת דיווח מרוכז של שעות ההוראה בחודש לועזי, שהעובדת תגיש בסיום חודש לועזי במזכירות.";
+    }
   }
 
   return {
@@ -340,56 +394,75 @@ const buildContractContent = (
     teacherName: activeContractRecord.teacherName,
     tz: activeContractRecord.tz || "_________",
     pronounTeacher,
+    idHolderLabel,
     prefixSheHe,
     suffixHeShe,
     suffixWorkHeShe,
     suffixTeachHeShe,
     pronounSuffix,
     suffixSigned,
+    tracksLabel: tracksLabel || "_________",
     rowDetails,
     commitmentLine,
     teachingRequirement,
+    travelLine: buildTravelLine(teacherRows.length ? teacherRows : [activeContractRecord]),
+    reportingLine,
   };
 };
 
-const contractContentToPlainText = (content: ContractContent) =>
-  `הסכם העסקה אישי
+const contractContentToPlainText = (content: ContractContent) => {
+  const detailBlock = content.rowDetails.map((row) => `• ${row}`).join("\n");
+  const bodyLines = [
+    content.commitmentLine,
+    content.travelLine,
+    `${content.prefixSheHe} למוסד לרשום את כל אחוזי ${content.pronounSuffix} במצבת המורים למשרד החינוך ו${content.suffixHeShe} מעל 140% משרה בכל מקומות ${content.suffixWorkHeShe}.`,
+    content.teachingRequirement,
+    content.reportingLine,
+  ].filter(Boolean);
+
+  return `הסכם העסקה אישי
 שנערך ונחתם בתל אביב _______ ביום _________ בחודש ____ שנת ______
 
-בין:
-אגודת בית יעקב (ע"ר)
-מספר עמותה: 580052306, מרחוב ר' יצחק אלחנן 4, תל אביב
+בין: אגודת בית יעקב (ע"ר)
+מס: 580052306 מרח' ר' יצחק אלחנן 4 תל אביב
 (להלן: "העמותה")
-— מצד אחד —
+-מצד אחד-
 
-לבין:
-${content.prefix} ${content.teacherName}
-נושא/ת ת.ז. ${content.tz}
+לבין: ${content.prefix} ${content.teacherName}
+${content.idHolderLabel} ${content.tz}
 (להלן: "${content.pronounTeacher}")
-— מצד שני —
+-מצד שני-
 
-העבודה מתבצעת מול הסמינר בעיר בית שמש, התשלום הוא ע"י אגודת "בית יעקב".
+העבודה מתבצעת בעיר בית שמש, התשלום הוא ע"י אגודת "בית יעקב".
+העבודה היא במסגרת מסלול ${content.tracksLabel} – וכוללת מסירת החומר בהתאם לתוכנית הלימודים, בחינה או מטלה וציון.
 
-סוכם לשנה"ל תשפ"ז:
-${content.rowDetails.map((row) => `* ${row}`).join("\n")}
----
+סוכם לשנה"ל תשפ"ז בלבד:
+${detailBlock}
 
-${content.commitmentLine}
-${content.prefixSheHe} למוסד לרשום את כל אחוזי ${content.pronounSuffix} במצבת המורים למשרד החינוך ו${content.suffixHeShe} מעל 140% משרה בכל מקומות ${content.suffixWorkHeShe}.
-${content.teachingRequirement}
+${bodyLines.join("\n")}
 
-____________________                    _____________________                   ______________________
-     האגודה                                    המנהלת                                  ${content.suffixSigned}`;
+--------------------                 ---------------------              ----------------------
+האגודה                                המנהלת                            ${content.suffixSigned}`;
+};
 
 const preserveLineSpacesForWord = (line: string) =>
   escapeHtml(line).replace(/ {2,}/g, (spaces) => "\u00A0".repeat(spaces.length));
 
 const contractPlainTextToWordHtml = (plainText: string, teacherName: string) => {
-  const linesHtml = plainText
-    .split("\n")
-    .map((line) => {
+  const lines = plainText.split("\n");
+  const linesHtml = lines
+    .map((line, index) => {
       if (line.trim() === "") {
         return `<p class="contract-line contract-gap">&nbsp;</p>`;
+      }
+      if (index === 0) {
+        return `<p class="contract-title">${preserveLineSpacesForWord(line)}</p>`;
+      }
+      if (line.includes("----") || line.includes("האגודה")) {
+        return `<p class="contract-sign">${preserveLineSpacesForWord(line)}</p>`;
+      }
+      if (line.startsWith("• ") || line.startsWith("* ")) {
+        return `<p class="contract-bullet">${preserveLineSpacesForWord(line)}</p>`;
       }
       return `<p class="contract-line">${preserveLineSpacesForWord(line)}</p>`;
     })
@@ -404,7 +477,7 @@ const contractPlainTextToWordHtml = (plainText: string, teacherName: string) => 
 <meta charset="utf-8">
 <meta name="ProgId" content="Word.Document">
 <meta name="Generator" content="Microsoft Word">
-<title>חוזה העסקה - ${escapeHtml(teacherName)}</title>
+<title>הסכם העסקה - ${escapeHtml(teacherName)}</title>
 <!--[if gte mso 9]><xml>
 <w:WordDocument>
   <w:View>Print</w:View>
@@ -416,25 +489,52 @@ const contractPlainTextToWordHtml = (plainText: string, teacherName: string) => 
 <style>
   @page Section1 {
     size: 595.3pt 841.9pt;
-    margin: 72pt 56pt 72pt 56pt;
+    margin: 64pt 56pt 64pt 56pt;
   }
   div.Section1 { page: Section1; }
   body {
     direction: rtl;
     unicode-bidi: embed;
-    font-family: David, Miriam, Arial, sans-serif;
+    font-family: Arial, sans-serif;
     font-size: 12pt;
-    color: #334155;
+    color: #000000;
     margin: 0;
   }
+  p.contract-title {
+    margin: 0 0 14pt 0;
+    line-height: 22pt;
+    mso-line-height-rule: exactly;
+    text-align: center;
+    font-weight: bold;
+    font-size: 16pt;
+    font-family: Arial, sans-serif;
+  }
   p.contract-line {
-    margin: 0 0 2pt 0;
+    margin: 0 0 3pt 0;
     line-height: 18pt;
     mso-line-height-rule: exactly;
     text-align: right;
     direction: rtl;
-    font-family: David, Miriam, Arial, sans-serif;
+    font-family: Arial, sans-serif;
     font-size: 12pt;
+  }
+  p.contract-bullet {
+    margin: 0 0 2pt 18pt;
+    line-height: 18pt;
+    mso-line-height-rule: exactly;
+    text-align: right;
+    direction: rtl;
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+  }
+  p.contract-sign {
+    margin: 10pt 0 0 0;
+    line-height: 18pt;
+    mso-line-height-rule: exactly;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-size: 12pt;
+    white-space: pre-wrap;
   }
   p.contract-gap {
     margin: 0 0 8pt 0;
